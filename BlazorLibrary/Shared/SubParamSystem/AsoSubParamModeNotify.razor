@@ -1,0 +1,32 @@
+﻿@using SMDataServiceProto.V1
+
+@if (SubParam != null)
+{
+    <div class="row mb-2">
+        <label class="form-label col-md-4">@AsoRep["AlertMode"]</label>
+        <div class="col-md-8">
+            <select class="form-select" @bind="SubParam.Call4AllShedule">
+                <option value="0">@GsoRep["IDS_STRING_NOTIFY_MODE_1"]</option>
+                <option value="1">@GsoRep["IDS_STRING_NOTIFY_MODE_2"]</option>
+                <option value="2">@GsoRep["IDS_STRING_NOTIFY_MODE_3"]</option>
+                <option value="3">@GsoRep["IDS_STRING_NOTIFY_MODE_4"]</option>
+                <option value="4">@GsoRep["IDS_STRING_NOTIFY_MODE_5"]</option>
+            </select>
+            @if (SubParam.Call4AllShedule != 1)
+            {
+                <label class="form-check-label me-3"><input type="checkbox" class="form-check-input me-2" checked="@(SubParam.AllowTTS==1? "checked": null)" @onchange="(e)=>{SubParam.AllowTTS=(bool)(e.Value??false)?1:0;}" />@AsoRep["TextToAudio"]</label>
+            }
+        </div>
+    </div>
+}
+else
+{
+    <PLoad />
+}
+
+
+
+@code {
+    [Parameter]
+    public SubsystemParam? SubParam { get; set; }
+}

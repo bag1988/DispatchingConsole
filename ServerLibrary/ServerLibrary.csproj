@@ -1,0 +1,45 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+
+	<PropertyGroup>
+		<TargetFramework>net8.0</TargetFramework>
+		<ImplicitUsings>enable</ImplicitUsings>
+		<Nullable>enable</Nullable>
+		<AssemblyName>$(AssemblyNameCompanyNamePrefix).$(AssemblyNameMajorPrefix).ServerLibrary</AssemblyName>
+		<RootNamespace>$(AssemblyNameCompanyNamePrefix).$(AssemblyNameMajorPrefix).ServerLibrary</RootNamespace>
+	</PropertyGroup>
+
+	<ItemGroup>
+	  <Compile Remove="Models\**" />
+	  <EmbeddedResource Remove="Models\**" />
+	  <None Remove="Models\**" />
+	</ItemGroup>
+
+	<ItemGroup>
+		<PackageReference Include="Asp.Versioning.Mvc" />
+		<PackageReference Include="Dapr.AspNetCore" />
+		<PackageReference Include="Grpc.AspNetCore" />
+		<PackageReference Include="Microsoft.AspNetCore.SignalR.Client" />
+		<PackageReference Include="Microsoft.EntityFrameworkCore" />
+		<PackageReference Include="Microsoft.EntityFrameworkCore.Sqlite" />
+		<PackageReference Include="Microsoft.EntityFrameworkCore.Tools">
+		  <PrivateAssets>all</PrivateAssets>
+		  <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
+		</PackageReference>
+		<PackageReference Include="SensorM.GsoApi.LibraryProto" />
+		<PackageReference Include="SensorM.GsoApi.SMP16xProto" />
+		<PackageReference Include="SensorM.GsoApi.SyntezProto" />
+		<PackageReference Include="SensorM.GsoApi.UUZSDataProto" />
+		<PackageReference Include="SensorM.GsoCore.ReplaceLibrary" />
+		<PackageReference Include="SensorM.GsoCore.RemoteConnectLibrary" />
+		<PackageReference Include="SensorM.GsoCore.SharedLibrary" />
+	</ItemGroup>
+
+	<ItemGroup>
+		<Protobuf Include="Pods.proto" />
+		<None Update="README.md">
+			<Pack>True</Pack>
+			<PackagePath>\</PackagePath>
+		</None>
+	</ItemGroup>
+
+</Project>

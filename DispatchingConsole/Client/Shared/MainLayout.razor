@@ -1,0 +1,160 @@
+﻿@using BlazorLibrary.FolderForInherits;
+@using BlazorLibrary.Shared.ObjectTree;
+@using SharedLibrary.Models;
+@using DispatchingConsole.Client.WebRTC;
+@using SharedLibrary.Utilities;
+@inherits LayoutComponentBase
+
+<Main Title="@DispRep["PODS"]" Width="300">
+    <Menu>
+        <video class="m-2 d-none" id="localVideo" for="@($"{IpAddressUtilities.GetAuthority(MyNavigationManager.BaseUri)}-{UserName}")" muted autoplay poster="/sound.svg?v=1"></video>
+        <DivNavLink>
+            <div class="d-flex">
+                @if (IsCreateConnect)
+                {
+                    <NavLink class="ms-1 pointer" @onclick="CloseCreateConnect">
+                        <span class="oi oi-arrow-circle-left"></span>
+                    </NavLink>
+                }
+                <input class="form-control ms-1" type="text" placeholder="@DispRep["SEARCH"]" @bind="SearchValue" @bind:event="oninput" />
+                @if (!IsCreateConnect && string.IsNullOrEmpty(SearchValue))
+                {
+                    <NavLink class="ms-1 pointer">
+                        <span class="oi oi-plus" title="@GsoRep["Add"]" @onclick="()=>IsCreateConnect=true"></span>
+                    </NavLink>
+                }
+                else if (!string.IsNullOrEmpty(SearchValue))
+                {
+                    <NavLink class="ms-1 pointer">
+                        <span class="oi oi-delete text-warning" title="@GsoRep["IDS_STRING_CLEAR"]" @onclick="()=>SearchValue=string.Empty"></span>
+                    </NavLink>
+                }
+            </div>
+            @if (IsCreateConnect)
+            {
+                <h5 class="mt-2 text-center">Создать чат</h5>
+                <form id="createconnect" @onsubmit="CreateConnect">
+                    <div class="d-flex">
+                        <InputFocus required placeholder="@GsoRep["IDS_STRING_NAME"]" @bind-Value="NewConnectName" />
+                    </div>
+                </form>
+                <ResultView TItem="ContactInfo" Items="GetCuInfoList" SelectList="@SelectList" SetSelectList="SetSelectList" ClassItems="d-flex my-1 px-2 py-1">
+                    <ChildContent Context="item">
+                        <text class="pointer">@($"{item.Name} - {item.UserName}")</text>
+                        @if (item.IsActive)
+                        {
+                            <span class="oi oi-media-record text-warning ms-1" title="online" style="font-size: 0.6em;"></span>
+                        }
+                        @if (SelectList?.LastOrDefault() == item && item.Type == TypeContact.Manual)
+                        {
+                            <span class="oi oi-trash text-danger ms-auto my-auto pointer" title="@GsoRep["IDS_STRING_DELETE"]" @onclick="DeleteUser"></span>
+                        }
+                    </ChildContent>
+                </ResultView>
+                <HR />
+                <div class="d-flex">
+                    <BSumbit AddClass="m-1 flex-fill" FormId="createconnect" />
+                    <BSecondary AddClass="m-1 flex-fill" Text="@DispRep["ADD_CU"]" OnClick="()=>IsAdd=true" />
+                </div>
+            }
+            else
+            {
+                @if (LoadConnectList)
+                {
+                    <PLoad />
+                }
+                else
+                {
+                    <ResultView TItem="ChatInfo" Items="ConnectList.Where(x=>x.NameRoom.Contains(SearchValue))" SelectList="@(SelectConnect!=null ? new (){SelectConnect}:null)" SetSelectList="SetSelectChat" DbClick="ViewEditModal" ClassItems="d-flex align-items-center my-1 px-2 py-1">
+                        <ChildContent Context="connect">
+                            <text class="pointer">@connect.NameRoom</text>
+                            @if (_webRtc.CountNoReadMessages(connect.Key) > 0)
+                            {
+                                <span class="badge bg-primary ms-1 rounded-pill">@_webRtc.CountNoReadMessages(connect.Key)</span>
+                            }
+                            @if (SelectConnect == connect && _webRtc.GetStateSelectCalling <= StateCall.Disconnect)
+                            {
+                                <span class="oi oi-trash text-danger ms-auto pointer" title="@GsoRep["IDS_STRING_DELETE"]" @onclick="()=>isDeleteChatRoom = true"></span>
+                            }
+                        </ChildContent>
+                    </ResultView>
+                }
+            }
+        </DivNavLink>
+    </Menu>
+    <ChildContent>
+        <CascadingValue Value="this">
+            @Body
+        </CascadingValue>
+    </ChildContent>
+</Main>
+
+@if (isDeleteChatRoom == true)
+{
+    <ModalDialog Title="@DispRep["DELETE_CHAT"]" ButtonCloseEvent="()=>isDeleteChatRoom=false">
+        <BodyContent>
+            <p class="alert alert-danger">
+                @(String.Format(DispRep["IS_DELETE_CHAT"], SelectConnect?.NameRoom))
+            </p>
+        </BodyContent>
+        <ButtonContent>
+            <BDelete OnClick="DeleteChatRoom" />
+            <BCancel OnClick="()=>isDeleteChatRoom=false" />
+        </ButtonContent>
+    </ModalDialog>
+}
+
+
+@if (IsEditConnect)
+{
+    <ModalDialog Title="@DispRep["EDIT_NAME"]" ButtonCloseEvent="CloseEditConnect">
+        <BodyContent>
+            <form id="editconnect" @onsubmit="SaveNewNameConnect">
+                @*Наименование*@
+                <div class="mb-3">
+                    <label class="form-label">@GsoRep["IDS_STRING_NAME"]</label>
+                    <InputFocus @bind-Value="NewConnectName" />
+                </div>
+            </form>
+
+        </BodyContent>
+        <ButtonContent>
+            <BSumbit FormId="editconnect" />
+            <BCancel OnClick="CloseEditConnect" />
+        </ButtonContent>
+    </ModalDialog>
+}
+
+@if (IsAdd)
+{
+    <ModalDialog Title="@DispRep["ADD_CU"]" ButtonCloseEvent="CloseAddUser">
+        <BodyContent>
+            <form id="createendpoint" @onsubmit="AddConnectInfo">
+                @*Наименование*@
+                <div class="mb-3">
+                    <label class="form-label">@GsoRep["IDS_STRING_NAME"]</label>
+                    <InputFocus pattern="^.{2,40}$" @bind-Value="NewName" />
+                </div>
+                @*Пользователь*@
+                <div class="mb-3">
+                    <label class="form-label">@DispRep["USER"]</label>
+                    <input pattern="^.{2,40}$" class="form-control" @bind="@NewUser">
+                </div>
+                @*Ip адрес*@
+                <div class="mb-3">
+                    <label class="form-label">@DispRep["IP_ADDRESS"]</label>
+                    <div class="d-flex align-items-center">
+                        <InputIpAddressOneFiled @bind-Value="NewIp" />
+                        <b>:</b>
+                        <input type="number" class="form-control w-25" max="99999" @bind="NewPort" />
+                    </div>
+                </div>
+
+            </form>
+        </BodyContent>
+        <ButtonContent>
+            <BSumbit FormId="createendpoint" />
+            <BCancel OnClick="CloseAddUser" />
+        </ButtonContent>
+    </ModalDialog>
+}

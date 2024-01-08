@@ -1,0 +1,76 @@
+﻿@using SensorM.GsoCore.SharedLibrary
+@using SharedLibrary.Models;
+@using SharedLibrary.Utilities;
+@using DispatchingConsole.Client.WebRTC;
+@inject ILogger<MessagesForChat> _logger
+
+<div style="display: flex;flex-direction: column-reverse;">
+    @if (Messages != null)
+    {
+        @if (Messages.Any())
+        {
+            var zIndex = Messages.GroupBy(x => x.Date.Date).Count();
+            @foreach (var group in Messages.GroupBy(x => x.Date.Date))
+            {
+
+                @foreach (var item in group)
+                {
+                    var isThisUser = (IpAddressUtilities.CompareForAuthority(item.AuthorityUrl, MyNavigationManager.BaseUri) && item.UserName == UserName);
+                    var isNext = NextUserEqual(item);
+
+                    <div class="w-100 @(isNext?"pt-1":"pt-2") px-2 d-flex message-container">
+                        <div class="@(isThisUser? "ms-auto":"")" style="max-width:85%; width:auto;">
+
+                            @if (!isThisUser && !isNext)
+                            {
+                                <strong class="me-2">@($"{GetNamePu(item)} - {item.UserName}")</strong>
+                            }
+                            <div class="alert-secondary @(isNext? "rounded": isThisUser? "rounded-bottom rounded-start":"rounded-bottom rounded-end")  p-2 text-truncate text-wrap">
+                                @if (!string.IsNullOrEmpty(item.Url))
+                                {
+                                    @if (_webRtc._videoExt.Contains(Path.GetExtension(item.Url).ToLower()))
+                                    {
+                                        <video class="m-2" style="width:96%; max-width:500px;" preload="none" onerror="this.classList.add('d-none')" onloadedmetadata="this.classList.remove('d-none')" controls>
+                                            <source src="@($"api/v1/chat/GetVideoServer?fileName={item.Url}")" type="video/webm">
+                                        </video>
+                                    }
+                                    else if (_webRtc._audioExt.Contains(Path.GetExtension(item.Url).ToLower()))
+                                    {
+                                        <audio controls="controls" preload="metadata" title="@($"{item.Date.ToLocalTime().ToString("G")} - {item.Message}")">
+                                            <source src="@($"api/v1/chat/GetAudioServer?fileName={item.Url}")" type="audio/webm">
+                                            @Rep["AudioSupport"]
+                                        </audio>
+                                    }
+                                    else if (_webRtc._imgExt.Contains(Path.GetExtension(item.Url).ToLower()))
+                                    {
+                                        <img title="@item.Message" alt="@item.Message" src="@($"api/v1/chat/GetFileServer?fileName={item.Url}")" style="max-width:500px; max-height:500px;" />
+                                    }
+                                    else
+                                    {
+                                        <a href="@($"api/v1/chat/DownLoadFile?fileName={item.Url}")" download="@($"{item.Message}{Path.GetExtension(item.Url)}")">@(item.Message ?? item.Url)</a>
+                                    }
+                                }
+                                else
+                                {
+                                    @item.Message
+                                }
+                                <small class="d-block text-end" style="font-size:0.6rem;">@item.Date.ToLocalTime().ToString("T")</small>
+                            </div>
+                        </div>
+                    </div>
+                }
+                <p class="text-center position-sticky my-2 top-0 bg-dark text-white" style="z-index:@(zIndex)">@group.Key.Date.ToLocalTime().ToString("D")</p>
+                zIndex--;
+            }
+        }
+        else
+        {
+            <PNoData />
+        }
+    }
+    else
+    {
+        <PLoad />
+    }
+</div>
+

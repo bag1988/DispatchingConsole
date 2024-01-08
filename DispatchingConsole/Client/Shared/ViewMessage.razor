@@ -1,0 +1,29 @@
+﻿@using SharedLibrary.Models;
+@using SharedLibrary.Utilities;
+@using DispatchingConsole.Client.WebRTC;
+
+
+<div class="toast show @((IpAddressUtilities.CompareForAuthority(MessageInfo?.AuthorityUrl, MyNavigationManager.BaseUri) && MessageInfo?.UserName==MyUser)? "ms-auto":"")">
+    <div class="toast-header">
+        <strong class="me-auto">@($"{GetNamePu} - {MessageInfo?.UserName}")</strong>
+        <small>@MessageInfo?.Date.ToLocalTime().ToString("g")</small>
+    </div>
+    <div class="toast-body text-truncate text-dark" style="white-space:break-spaces;">
+        @MessageInfo?.Message
+    </div>
+</div>
+@code {
+    [Parameter]
+    public ChatMessage? MessageInfo { get; set; }
+
+    [Parameter]
+    public string? MyUser { get; set; }
+      
+    string GetNamePu
+    {
+        get
+        {
+            return _webRtc.ContactList.FirstOrDefault(x => IpAddressUtilities.CompareForAuthority(x.AuthorityUrl, MessageInfo?.AuthorityUrl) && x.UserName == MessageInfo?.UserName)?.Name ?? IpAddressUtilities.GetHost(MessageInfo?.AuthorityUrl);
+        }
+    }
+}

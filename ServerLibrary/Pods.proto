@@ -1,0 +1,242 @@
+﻿syntax = "proto3";
+
+import "google/protobuf/empty.proto";
+import "google/protobuf/wrappers.proto";
+import "google/protobuf/timestamp.proto";
+import "google/protobuf/any.proto";
+import "google/protobuf/duration.proto";
+
+package PodsProto.V1;
+
+service PodsService
+{
+	//for group
+	rpc GetChats(UserIdentity ) returns (ChatsList);
+
+	rpc AddChat(ChatAndUserKey) returns (google.protobuf.BoolValue);
+
+	rpc UpdateNameChat(NewNameForChat) returns (google.protobuf.BoolValue);
+
+	rpc DeleteChat(UserKeyAndChatKey) returns (google.protobuf.BoolValue);
+
+	rpc DeleteConnectsInChat(ConnectList)  returns (google.protobuf.BoolValue); // ConnectList for delete
+
+	rpc AddConnectsInChat(ConnectList)  returns (google.protobuf.BoolValue); // ConnectList for add
+
+	//for messages
+	rpc GetMessagesForChat(RequestPaginatedOutput) returns (MessagesForChat);
+
+	rpc AddMessageForChat(NewMessage) returns (google.protobuf.BoolValue);
+
+	//for Contact
+	rpc AddLocalContact(ContactInfoList) returns (google.protobuf.BoolValue);
+	rpc AddRemoteContact(ContactInfoList) returns (google.protobuf.BoolValue);
+	rpc AddContactForUser(ContactForUser) returns (google.protobuf.BoolValue);
+
+	rpc UpdateLastActiveContact(ContactInfo) returns (google.protobuf.BoolValue);	
+
+	rpc DeleteContactForUser(DeleteContactKey) returns (google.protobuf.BoolValue);
+
+	rpc GetAllContactForUser(UserIdentity) returns (ContactInfoList);
+
+	rpc GetLocalContact(google.protobuf.Empty) returns (ContactInfoList);
+	
+	rpc FindCuName(google.protobuf.StringValue) returns (google.protobuf.StringValue);
+
+
+	rpc GetCountNoReadMessages(UserIdentity) returns (CountNoReadMessageForUserList);
+
+	rpc RemoveNoReadMessages(UserKeyAndChatKey) returns (google.protobuf.BoolValue);
+
+}
+
+message RequestPaginatedOutput
+{
+	int32 skip = 1;
+	int32 take = 2;
+	google.protobuf.Any key = 3;
+	google.protobuf.Any filtr = 4;
+}
+
+message NewMessage
+{
+	UserKeyAndChatKey key = 1;
+	ChatMessage message = 2;
+}
+
+message MessagesForChat
+{
+	repeated ChatMessage list = 1;
+	int32 all_count = 2;
+}
+
+message ChatMessage
+{
+	int32 id = 1;
+	int32 chat_info_id = 2;
+	string user_name = 3;
+	string authority_url = 4;
+	string message = 5;
+	google.protobuf.Timestamp Date = 6;
+	string url = 7;
+}
+
+message CountNoReadMessageForUserList
+{
+	repeated CountNoReadMessageForUser list = 1;
+}
+
+message CountNoReadMessageForUser
+{
+	string chat_key = 1;
+	int32 count = 2;
+}
+
+message NoReadMessages
+{
+	int32 id = 1;
+	int32 user_identity_id = 2;
+	int32 chat_info_id = 3;
+	int32 count = 4;
+}
+
+message NewNameForChat
+{
+	UserKeyAndChatKey key = 1;
+	string new_name = 2;
+}
+
+message ConnectList
+{
+	UserKeyAndChatKey key = 1;
+	repeated ConnectInfo items = 2;
+}
+
+message UserKeyAndChatKey
+{
+	UserIdentity  user_key = 1;
+	string chat_key = 2;
+}
+
+message UserIdentity 
+{
+	int32 id = 1;
+	string user_name = 2;
+	string authority_url = 3;
+}
+
+message ManualContactInfo
+{
+	int32 id=1;
+	int32 staff_id = 2;
+	string name_cu = 3;
+	string authority_url = 4;
+	string user_name = 5;
+	google.protobuf.Timestamp last_active = 6;
+	int32 user_identity_id = 7;
+}
+
+message DeleteContactKey
+{
+	UserIdentity user_key = 1;
+	UserIdentity contact_key = 2;
+}
+
+message ContactForUser
+{
+	UserIdentity user_key = 1;
+	ManualContactInfo contact = 2;
+}
+
+message ContactInfo
+{
+	int32 id=1;
+	int32 staff_id = 2;
+	string name_cu = 3;
+	string authority_url = 4;
+	string user_name = 5;
+	google.protobuf.Timestamp last_active = 6;
+	TypeContact type = 7;
+}
+
+message ContactInfoList
+{
+	repeated ContactInfo list = 1;
+}
+
+
+message ChatsList
+{
+	repeated ChatInfo list = 1;
+}
+
+message ChatsForUser
+{
+	UserIdentity  user_key = 1;
+	repeated ChatInfo list = 2;
+}
+
+message ChatAndUserKey
+{
+	UserIdentity  user_key = 1;
+	ChatInfo chat = 2;
+}
+
+message ChatInfo 
+{
+	int32 id=1;
+	int32 user_identity_id = 2;
+	string key = 3;
+	string name_room = 4;
+    repeated ConnectInfo items = 5;	
+    bool is_default = 6;
+    string authority_create = 7;
+    string user_create = 8;
+    string id_ui_connect = 9;
+    TypeConnect out_type_conn = 10;
+}
+
+message ConnectInfo 
+{
+	int32 id = 1;
+	int32 chat_info_id = 2;
+    string authority_url = 3;
+    StateCall state = 4;
+	string user_name = 5;
+}
+
+enum TypeConnect
+{
+	MESSAGE = 0;
+    SOUND = 1;
+    VIDEO = 2;
+    SCREEN = 3;
+}
+
+enum StateCall
+{
+    ERROR = 0;
+    ERROR_CREATE_HUB = 1;
+    ABORTED = 2;
+    OTHER_DEVICE = 3;
+    DISCONNECT = 4;
+    CALLING = 200;
+    CREATE_ANSWER = 201;
+    CREATE_P_2_P = 202;
+    CONNECTED = 203;
+    CHANGE_STREAM = 204;
+}
+
+enum StateRecord
+{
+	Hide = 0;
+	Show = 1;	
+}
+
+enum TypeContact
+{
+	Unknow = 0;
+	Local = 1;
+	Remote = 2;
+	Manual = 3;
+}

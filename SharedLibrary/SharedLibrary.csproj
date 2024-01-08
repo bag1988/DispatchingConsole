@@ -1,0 +1,39 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+
+	<PropertyGroup>
+		<TargetFramework>net8.0</TargetFramework>
+		<ImplicitUsings>enable</ImplicitUsings>
+		<Nullable>enable</Nullable>
+		<AssemblyName>$(AssemblyNameCompanyNamePrefix).$(AssemblyNameMajorPrefix).SharedLibrary</AssemblyName>
+		<RootNamespace>$(AssemblyNameCompanyNamePrefix).$(AssemblyNameMajorPrefix).SharedLibrary</RootNamespace>
+	</PropertyGroup>
+
+	<ItemGroup>
+		<PackageReference Include="SensorM.GsoApi.AsoDataProto" />
+		<PackageReference Include="SensorM.GsoApi.GateProto" />
+		<PackageReference Include="SensorM.GsoApi.LibraryProto" />
+		<PackageReference Include="Microsoft.Extensions.Configuration.FileExtensions" />
+		<PackageReference Include="Microsoft.Extensions.Configuration.Json" />
+		<PackageReference Include="Microsoft.Extensions.Hosting.Abstractions" />
+		<PackageReference Include="Microsoft.Extensions.Localization.Abstractions" />
+		<PackageReference Include="SensorM.GsoApi.LicenseProto" />
+		<PackageReference Include="SensorM.GsoApi.SMControlSysProto" />
+		<PackageReference Include="SensorM.GsoApi.SMSSGsoProto" />
+		<PackageReference Include="SensorM.GsoApi.StaffDataProto" />
+		<PackageReference Include="System.IdentityModel.Tokens.Jwt" />
+		<PackageReference Include="Xabe.FFmpeg" />
+	</ItemGroup>
+	
+	<ItemGroup>
+		<None Update="README.md">
+			<Pack>True</Pack>
+			<PackagePath>\</PackagePath>
+		</None>
+	</ItemGroup>
+
+	<!--<ItemGroup>
+    <EmbeddedResource Update="KeyType.ru.resx">
+      <SubType>Designer</SubType>
+    </EmbeddedResource>
+  </ItemGroup>-->
+</Project>

@@ -1,0 +1,42 @@
+﻿<Project Sdk="Microsoft.NET.Sdk.Razor">
+
+	<PropertyGroup>
+		<TargetFramework>net8.0</TargetFramework>
+		<Nullable>enable</Nullable>
+		<ImplicitUsings>enable</ImplicitUsings>
+		<AssemblyName>$(AssemblyNameCompanyNamePrefix).$(AssemblyNameMajorPrefix).BlazorLibrary</AssemblyName>
+		<!--<RootNamespace>$(AssemblyNameCompanyNamePrefix).$(AssemblyNameMajorPrefix).BlazorLibrary</RootNamespace>-->
+	</PropertyGroup>
+
+	<ItemGroup>
+		<None Remove="wwwroot\script\site.js" />
+		<None Remove="wwwroot\script\sw-registrator.js" />
+	</ItemGroup>
+		
+	<ItemGroup>
+		<SupportedPlatform Include="browser" />
+	</ItemGroup>
+
+	<ItemGroup>
+		<PackageReference Include="Microsoft.AspNetCore.Components.Authorization" />
+		<PackageReference Include="Microsoft.AspNetCore.Components.WebAssembly" />
+		<PackageReference Include="Microsoft.AspNetCore.Components.WebAssembly.DevServer" />
+		<PackageReference Include="Microsoft.AspNetCore.SignalR.Client" />
+		<PackageReference Include="Microsoft.Extensions.Http" />
+		<PackageReference Include="Microsoft.Extensions.Localization" />
+		<PackageReference Include="SensorM.GsoApi.ArmODProto" />
+		<PackageReference Include="SensorM.GsoApi.SMP16xProto" />
+		<PackageReference Include="SensorM.GsoApi.SyntezProto" />
+		<PackageReference Include="SensorM.GsoApi.UUZSDataProto" />
+		<PackageReference Include="SensorM.GsoCore.ReplaceLibrary" />
+		<PackageReference Include="SensorM.GsoCore.SharedLibrary" />
+		<PackageReference Include="SensorM.GsoApi.SMDataProto" />
+	</ItemGroup>
+	
+	<ItemGroup>
+		<None Update="README.md">
+			<Pack>True</Pack>
+			<PackagePath>\</PackagePath>
+		</None>
+	</ItemGroup>
+</Project>

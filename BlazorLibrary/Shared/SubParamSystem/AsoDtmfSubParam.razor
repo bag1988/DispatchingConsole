@@ -1,0 +1,38 @@
+﻿@using SMDataServiceProto.V1
+
+@if (SubParam != null)
+{
+    <fieldset>
+        @*Режим подтверждения*@
+        <legend>@GSOFormRep["IDC_STATIC_DTMF_CONFIRM_MODE"]</legend>
+        @*Информирование о правильности ввода DTMF пароля*@
+        <div class="row mb-2">
+            <label class="form-check-label me-3"><input type="checkbox" class="form-check-input me-2"/>@GSOFormRep["IDC_CHECK_DTMF_CONFIRM"]</label>            
+        </div>
+        @*Общая длительность ожидания подтверждения DTMF паролем (с)*@
+        <div class="row mb-2">
+            <label class="form-label col-md-4">@GSOFormRep["IDC_CHECK_DTMF_TIMEOUT"]</label>
+            <div class="col-md-8">
+                <input type="number" class="form-control" min="0" max="90">
+            </div>
+        </div>
+        @*Повторы ввода DTMF пароля*@
+        <div class="row">
+            <label class="form-label col-md-4">@GSOFormRep["IDC_CHECK_DTMF_REPEAT_COUNT"]</label>
+            <div class="col-md-8">
+                <input type="number" class="form-control" min="0" max="3">
+            </div>
+        </div>
+    </fieldset>
+}
+else
+{
+    <PLoad />
+}
+
+
+
+@code {
+    [Parameter]
+    public SubsystemParam? SubParam { get; set; }
+}

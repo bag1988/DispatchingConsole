@@ -1,0 +1,285 @@
+﻿@page "/{MissedKeyChatRoom?}"
+@using SharedLibrary.Models;
+@using DispatchingConsole.Client.Shared.DropFiles;
+@using DispatchingConsole.Client.Shared.PasteFiles;
+@using SharedLibrary.Utilities;
+@using DispatchingConsole.Client.WebRTC;
+@inject ILogger<Index> _logger
+@inherits FiltrInherits<ViewPodsMessageFiltr>
+
+
+
+<TitleView>@DispRep["PODS"]</TitleView>
+
+    @if (_webRtc.InCallingConnect != null || SelectConnect != null)
+{
+    <PSticky Color="warning" StyleTop="0">
+        <div class="lh-1">
+            <b class="d-block" title="@GetJoinIpAddress">@GetNameRoom</b>
+            @if (GetCountUser > 0)
+            {
+                <small @onclick="ChangeItemsConnect" class="text-primary pointer">@($"{DispRep["NUMBER_PARTICIPANTS"]}: {GetCountUser}")</small>
+            }
+        </div>
+        @if (!IsRecording)
+        {
+            @if (_webRtc.InCallingConnect != null)
+            {
+                @*входящий вызов*@
+                <BSuccess AddClass="ms-2" OnClick="()=>CreateAnswer(TypeConnect.Sound)">
+                    <img width="22" alt="@DispRep["TAKE_CALL"]" title="@DispRep["TAKE_CALL"]" src="/icons/in-call.svg" />
+                </BSuccess>
+                <BWarning AddClass="ms-2" OnClick="()=>CreateAnswer(TypeConnect.Video)">
+                    <img width="22" alt="@DispRep["TAKE_VIDEO_CALL"]" title="@DispRep["TAKE_VIDEO_CALL"]" src="/icons/videocam.svg" />
+                </BWarning>
+                <BDanger AddClass="ms-2" OnClick="CancelCall">
+                    <img width="22" alt="@DispRep["CANCEL_CALL"]" title="@DispRep["CANCEL_CALL"]" src="/icons/end-call.svg" />
+                </BDanger>
+            }
+            else if (SelectConnect != null)
+            {
+                @if (!_webRtc.ConnectList.Any(x => x.Key != SelectConnect.Key && (x.Items.Any(i => i.State >= StateCall.Calling))))
+                {
+                    @if (SelectConnect.IdUiConnect.Equals(Guid.Parse(_appId ?? string.Empty)) && _webRtc.GetStateSelectCalling >= StateCall.Calling)
+                    {
+                        @if (_webRtc.GetStateSelectCalling == StateCall.Calling)
+                        {
+                            @*идет дозвон*@
+                            <BDanger AddClass="ms-2" OnClick="CancelOutCall">
+                                <img width="22" alt="@DispRep["CANCEL_CALL"]" title="@DispRep["CANCEL_CALL"]" src="/icons/calling.svg" />
+                            </BDanger>
+                        }
+                        else if (_webRtc.GetStateSelectCalling == StateCall.CreateP2P || _webRtc.GetStateSelectCalling == StateCall.CreateAnswer)
+                        {
+                            @*идет создание P2P*@
+                            <div class="spinner-border ms-2" role="status"><span class="visually-hidden">@DispRep["CONNECTING"]</span></div>
+                        }
+                        else if (_webRtc.GetStateSelectCalling == StateCall.Connected)
+                        {
+                            @*Установленно соединение*@
+                            @if (!isSoundRecord)
+                            {
+                                <BSecondary AddClass="ms-2" OnClick="()=>ChangeAudio(true)">
+                                    <img width="22" alt="@DispRep["ENABLED_SOUND"]" title="@DispRep["ENABLED_SOUND"]" src="/icons/microphone.svg" />
+                                </BSecondary>
+                            }
+                            else
+                            {
+                                <BSecondary IsOutline="true" AddClass="ms-2" OnClick="()=>ChangeAudio(false)">
+                                    <img width="22" alt="@DispRep["DISABLED_SOUND"]" title="@DispRep["DISABLED_SOUND"]" src="/icons/microphone-off.svg" />
+                                </BSecondary>
+                            }
+                            @*---------------*@
+                            @if (SelectConnect.OutTypeConn == TypeConnect.Video)
+                            {
+                                <BWarning IsOutline="true" AddClass="ms-2" OnClick="()=>AddVideoToLocalStream(TypeShare.VideoOff)">
+                                    <img width="22" alt="@DispRep["DISABLED_VIDEO"]" title="@DispRep["DISABLED_VIDEO"]" src="/icons/videocam-off.svg" />
+                                </BWarning>
+                                <BPrimary AddClass="ms-2" OnClick="()=>AddVideoToLocalStream(TypeShare.ScreenOn)">
+                                    <img width="22" alt="@DispRep["ENABLED_SHARE"]" title="@DispRep["ENABLED_SHARE"]" src="/icons/screen-share.svg" />
+                                </BPrimary>
+                            }
+                            else if (SelectConnect.OutTypeConn == TypeConnect.Screen)
+                            {
+                                <BWarning AddClass="ms-2" OnClick="()=>AddVideoToLocalStream(TypeShare.VideoOn)">
+                                    <img width="22" alt="@DispRep["ENABLED_VIDEO"]" title="@DispRep["ENABLED_VIDEO"]" src="/icons/videocam.svg" />
+                                </BWarning>
+                                <BPrimary IsOutline="true" AddClass="ms-2" OnClick="()=>AddVideoToLocalStream(TypeShare.ScreenOff)">
+                                    <img width="22" alt="@DispRep["DISABLED_SHARE"]" title="@DispRep["DISABLED_SHARE"]" src="/icons/stop-screen-share.svg" />
+                                </BPrimary>
+                            }
+                            else
+                            {
+                                <BWarning AddClass="ms-2" OnClick="()=>AddVideoToLocalStream(TypeShare.VideoOn)">
+                                    <img width="22" alt="@DispRep["ENABLED_VIDEO"]" title="@DispRep["ENABLED_VIDEO"]" src="/icons/videocam.svg" />
+                                </BWarning>
+                                <BPrimary AddClass="ms-2" OnClick="()=>AddVideoToLocalStream(TypeShare.ScreenOn)">
+                                    <img width="22" alt="@DispRep["ENABLED_SHARE"]" title="@DispRep["ENABLED_SHARE"]" src="/icons/screen-share.svg" />
+                                </BPrimary>
+                            }
+                            <BDanger AddClass="ms-2" OnClick="CloseCallAction">
+                                <img width="22" alt="@DispRep["END_CALL"]" title="@DispRep["END_CALL"]" src="/icons/end-call.svg" />
+                            </BDanger>
+                        }
+                    }
+                    else if (_webRtc.GetStateSelectCalling <= StateCall.Disconnect)
+                    {
+                        @*Нет подключение*@
+                        <BSuccess AddClass="ms-2" OnClick="()=>StartConnect(TypeConnect.Sound)">
+                            <img width="22" alt="@DispRep["CALL"]" title="@DispRep["CALL"]" src="/icons/out-call.svg" />
+                        </BSuccess>
+                        <BWarning AddClass="ms-2" OnClick="()=>StartConnect(TypeConnect.Video)">
+                            <img width="22" alt="@DispRep["VIDEO_CALL"]" title="@DispRep["VIDEO_CALL"]" src="/icons/videocam.svg" />
+                        </BWarning>
+                    }
+                    else
+                    {
+                        <b class="ms-2">@DispRep["ANSWERED_OTHER_DEVICE"]</b>
+                    }
+                }
+                else
+                {
+                    <b class="ms-2">
+                        @($"{DispRep["ONLY_MESSAGES"]} {DispRep["ACTIVE_CONNECT"]} - ")
+                    </b>
+                    <BPrimary AddClass="m-1 btn-sm" IsOutline="true" OnClick="()=>SelectConnect =_webRtc.ConnectList.FirstOrDefault(x => x.Key != SelectConnect.Key && (x.Items.Any(i => i.State >= StateCall.Calling)))" Text="@(_webRtc.ConnectList.FirstOrDefault(x => x.Key != SelectConnect.Key && (x.Items.Any(i => i.State >= StateCall.Calling)))?.NameRoom?? "Error get name")" />
+                }
+            }
+        }
+    </PSticky>
+}
+
+<div class="row">
+    <div class="col" @ondragover="OnDragOver" @ondragover:preventDefault="true" @ondragover:stopPropagation="true" @ondropfiles="OnSetFiles">
+        @if (SelectConnect != null)
+        {
+            @if (!IsPageLoad)
+            {
+                <FiltrInput AddItemFiltr="AddItemFiltr" RemoveItemsFiltr="RemoveItemsFiltr" Items="FiltrItems" Hints="HintItems" PlaceHolder="@PlaceHolder" />
+            }
+            <DivScroll>
+                <MessagesForChat Messages="_webRtc.CurrentChatMessages" />
+                <BlazorLibrary.Shared.Modal.ButtonModal>
+                    <form @onsubmit="SendMessageForClient">
+                        <textarea @onkeydown="OnKeyUp" @onkeydown:preventDefault="_shouldPreventDefault" @ref="_textArea" cols="20" class="form-control" @onpastefiles="OnSetFiles" @bind="_webRtc.TempMessage" @bind:event="oninput" placeholder="@DispRep["TEXT_MESSAGE"]"></textarea>
+                        <BSumbit Text="@DispRep["SEND"]" />
+                        @if (DropFileToChat == null)
+                        {
+                            @if (!IsRecording)
+                            {
+                                <BPrimary Text="@($"{(UploadForDialog>0?$" {UploadForDialog}KB / {FileSize / 1024}KB":DispRep["UPLOADING"])}")" OnClick="ShowOpenFilePicker">
+                                    <span title="@DispRep["SEND_FILE"]" class="oi oi-data-transfer-upload me-0"></span>
+                                </BPrimary>
+                            }
+                            @if (_webRtc.GetStateSelectCalling <= StateCall.Disconnect && UploadForDialog == 0)
+                            {
+                                <button class="btn @(IsRecording?"btn-warning align-items-center":"btn-danger") m-1" type="button" @onclick="()=>(IsRecording?SendStopRecordAudio():StartStreamRecordAudio())">
+                                    <span class="oi @(IsRecording?"oi-media-stop":"oi-microphone") mx-1"></span>
+                                    @if (IsRecording == true)
+                                    {
+                                        <span class="ms-1">@TimeLeft</span>
+                                    }
+                                </button>
+                            }
+                        }
+                        else
+                        {
+                            <span class="m-1">@($"{(UploadForDrop > 0 ? $" {UploadForDrop}KB / {FileSizeForDrop / 1024}KB" : DispRep["UPLOADING"])}")</span>
+                        }
+                    </form>
+                </BlazorLibrary.Shared.Modal.ButtonModal>
+            </DivScroll>
+        }
+    </div>
+    <div id="remoteVideoArray" class="col col-md-5 d-none"></div>
+
+</div>
+
+
+@if (IsEditItemsConnect)
+{
+    <ModalDialog Title="@DispRep["INFO_PARTICIPANTS"]" ButtonCloseEvent="CloseEditListConnect">
+        <BodyContent>
+            @if (NewItemConnect != null)
+            {
+                <div class="row">
+                    @if (!IsICreate)
+                    {
+                        <ResultView IsSetFocus="false" TItem="ConnectInfo" Items="NewItemConnect">
+                            <ChildContent Context="item">
+                                @GetNameCU(item.AuthorityUrl, item.UserName)
+                                @if (GetStateUser(item.AuthorityUrl, item.UserName))
+                                {
+                                    <span class="oi oi-media-record text-warning ms-1" title="online" style="font-size: 0.6em;"></span>
+                                }
+                            </ChildContent>
+                        </ResultView>
+                        <PSticky Color="secondary text-end" StyleBottom="0">
+                            <BCancel OnClick="CloseEditListConnect" />
+                            @if (_webRtc.GetStateSelectCalling <= StateCall.Disconnect)
+                            {
+                                <BDelete AddClass="ms-auto" OnClick="StartDeleteChatRoom" />
+                            }
+                        </PSticky>
+                    }
+                    else
+                    {
+                        <div class="col-md-6">
+                            <DivScroll SetClass="pe-2">
+                                <PHeader>
+                                    @*Доступные пользователи*@
+                                    @DispRep["IDS_STRING_FREE_USER"]
+                                </PHeader>
+                                <ResultView TItem="ContactInfo" Items="GetCuInfoListForEdit" SelectList="@SelectListConnect" SetSelectList="SetSelectListConnect" DbClick="AddSelect">
+                                    <ChildContent Context="item">
+                                        @($"{item.Name} - {item.UserName}")
+                                        @if (item.IsActive)
+                                        {
+                                            <span class="oi oi-media-record text-warning ms-1" title="online" style="font-size: 0.6em;"></span>
+                                        }
+                                    </ChildContent>
+                                </ResultView>
+                                <PSticky Color="secondary text-end" StyleBottom="0">
+                                    <BCancel OnClick="CloseEditListConnect" />
+                                    @if (_webRtc.GetStateSelectCalling <= StateCall.Disconnect)
+                                    {
+                                        <BDelete OnClick="StartDeleteChatRoom" />
+                                    }
+                                    @if (GetCuInfoListForEdit?.Any() ?? false)
+                                    {
+                                        <div class="ms-auto">
+                                            <BSecondary IsOutline="true" OnClick="AddSelect">
+                                                <span class="oi oi-caret-right me-0 ms-2"></span>
+                                            </BSecondary>
+                                            @* <BSecondary IsOutline="true" OnClick="AddAll">
+                            <span class="oi oi-media-skip-forward me-0 ms-2"></span>
+                            </BSecondary>*@
+                                        </div>
+                                    }
+                                </PSticky>
+                            </DivScroll>
+                        </div>
+                        <div class="col-md-6">
+                            <DivScroll SetClass="pe-2">
+                                <PHeader>
+                                    @*Выбранные пользователи*@
+                                    @DispRep["IDS_STRING_SELECT_USER"]
+                                </PHeader>
+                                <ResultView IsSetFocus="false" TItem="ConnectInfo" Items="NewItemConnect" SelectList="SelectItemConnect" SetSelectList="SetSelectItemConnect" DbClick="RemoveSelect">
+                                    <ChildContent Context="item">
+                                        @GetNameCU(item.AuthorityUrl, item.UserName)
+                                        @if (GetStateUser(item.AuthorityUrl, item.UserName))
+                                        {
+                                            <span class="oi oi-media-record text-warning ms-1" title="online" style="font-size: 0.6em;"></span>
+                                        }
+                                    </ChildContent>
+                                </ResultView>
+                                @if (NewItemConnect?.Count > 1)
+                                {
+                                    <PSticky Color="secondary" StyleBottom="0">
+                                        @*Удалить все объекты из списка*@
+                                        <BSecondary IsOutline="true" OnClick="RemoveAll">
+                                            <span class="oi oi-media-skip-backward"></span>
+                                        </BSecondary>
+                                        @if (SelectItemConnect?.Count > 0)
+                                        {
+                                            @*Удаление выбранный объект из списка*@
+                                            <BSecondary IsOutline="true" OnClick="RemoveSelect">
+                                                <span class="oi oi-caret-left"></span>
+                                            </BSecondary>
+                                        }
+                                        @if (SelectConnect != null && NewItemConnect?.Count > 1)
+                                        {
+                                            <BSave AddClass="m-1 ms-auto" OnClick="SaveChangeItems" />
+                                        }
+                                    </PSticky>
+                                }
+
+                            </DivScroll>
+                        </div>
+                    }
+                </div>
+            }
+        </BodyContent>
+    </ModalDialog>
+}
