@@ -49,22 +49,22 @@ namespace DispatchingConsole.Client.Shared
             return base.OnParametersSetAsync();
         }
 
-        bool NextUserEqual(ChatMessage item)
+        bool PrevUserEqual(ChatMessage item)
         {
             var index = Messages?.IndexOf(item) ?? 0;
 
             if (index > -1 && index < Messages?.Count)
             {
-                if (index + 1 == Messages.Count)
+                if (index == 0)
                 {
                     return false;
                 }
-                var next = Messages.ElementAtOrDefault(index + 1);
-                return (next.AuthorityUrl == item.AuthorityUrl && next.UserName == item.UserName);
+                var prev = Messages.ElementAtOrDefault(index - 1);
+                return (prev.AuthorityUrl == item.AuthorityUrl && prev.UserName == item.UserName);
             }
             return false;
         }
-               
+
         string GetNamePu(ChatMessage? item)
         {
             return _webRtc.ContactList.FirstOrDefault(x => IpAddressUtilities.CompareForAuthority(x.AuthorityUrl, item?.AuthorityUrl) && x.UserName == item?.UserName)?.Name ?? IpAddressUtilities.GetHost(item?.AuthorityUrl);

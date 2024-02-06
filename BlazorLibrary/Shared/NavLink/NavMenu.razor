@@ -1,5 +1,6 @@
-﻿<PageTitle>@Title</PageTitle>
-<div class="sidebar" @onkeydown="KeySet" tabindex="0" @ref="div" style="max-height:@(WindowHeight)px;  min-width:@(Width)px; width:@(Width)px">
+﻿@inject ILogger<NavMenu> _logger
+<PageTitle>@Title</PageTitle>
+    <div class="sidebar" @onkeydown="KeySet" tabindex="0" @ref="div" style="max-height:100vh;  min-width:@(Width)px; width:@(Width)px">
     <div class="top-row py-0 navbar navbar-dark">
         <div class="container-fluid">
             <a class="navbar-brand text-center" href="">
@@ -46,7 +47,7 @@
                     <small class="d-block mt-2">@Rep["PO_NAME"]</small>
                     <small class="d-block mb-2">@GetPoName</small>
                     @*Версия*@
-                    <small class="d-block my-2">Версия @PVersion?.BuildNumber</small>
+                    <small class="d-block my-2">@GsoRep["VERSION"] @PVersion?.BuildNumber</small>
                     <HR />
                     @*Модуль "{Наименование ПО}"*@
                     <small class="d-block my-2">@($"{StartUIRep["IDS_EVENT_MODULE"]} \"{Title}\"")</small>

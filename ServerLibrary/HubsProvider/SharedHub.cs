@@ -1,15 +1,22 @@
-﻿using System.Threading.Channels;
+﻿using System.Net;
+using System.Threading.Channels;
 using Google.Protobuf;
 using Google.Protobuf.WellKnownTypes;
 using Grpc.Core;
 using Microsoft.AspNetCore.Authorization;
+using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.SignalR;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Primitives;
 using RemoteConnectLibrary;
+using SensorM.GsoCommon.ServerLibrary;
 using ServerLibrary.Extensions;
 using SharedLibrary;
+using SharedLibrary.GlobalEnums;
+using SharedLibrary.Utilities;
 using SMDataServiceProto.V1;
+using static Google.Rpc.Context.AttributeContext.Types;
 using static SMSSGsoProto.V1.SMSSGso;
 using static SyntezServiceProto.V1.SyntezService;
 
@@ -47,7 +54,7 @@ namespace ServerLibrary.HubsProvider
                     using var activity = this.ActivitySourceForHub()?.StartActivity();
                     activity?.AddTag("Пользователь ID", Context.ConnectionId);
                     activity?.AddTag("Метод", NameTopic);
-                    await Clients.All.SendCoreAsync(NameTopic, new[] { Value });
+                    await Clients.All.SendCoreAsync(NameTopic, [Value]);
                 }
             }
             catch (Exception ex)
@@ -349,6 +356,83 @@ namespace ServerLibrary.HubsProvider
                 _logger.WriteLogError(ex, $"{nameof(RemoveOldTmpFile)}");
             }
             return Task.CompletedTask;
-        }                
+        }
+
+        /// <summary>
+        /// Входящие подключение к серверу
+        /// </summary>
+        /// <returns></returns>
+        public override Task OnConnectedAsync()
+        {
+            try
+            {
+                var context = Context.GetHttpContext();
+                var userName = context?.User.Identity?.Name ?? "NoAuthorize";
+                var urlConnect = IpAddressUtilities.GetAuthority(context?.Connection.RemoteIpAddress?.MapToIPv4().ToString());
+                StringValues valuesUi = new();
+                var idUi = context?.Request.Query.TryGetValue(nameof(CookieName.AppId), out valuesUi);
+                Guid.TryParse(valuesUi.FirstOrDefault(), out var guidUi);
+
+                _logger.LogTrace(@"Новое подключение к хабу от {forUrl}, пользователь {userName}, guid {guid}, назначенный ID {Id}, локальный хост {Host}", urlConnect, userName, guidUi, Context.ConnectionId, context?.Request.Host);
+
+                if (!string.IsNullOrEmpty(urlConnect))
+                    AddToGroup(urlConnect).Wait();
+            }
+            catch (Exception ex)
+            {
+                _logger.WriteLogError(ex, nameof(OnConnectedAsync));
+            }
+            return base.OnConnectedAsync();
+        }
+
+        /// <summary>
+        /// Потеря подключения к серверу
+        /// </summary>
+        /// <param name="exception"></param>
+        /// <returns></returns>
+        public override Task OnDisconnectedAsync(Exception? exception)
+        {
+            try
+            {
+                var context = Context.GetHttpContext();
+                var urlConnect = IpAddressUtilities.GetAuthority(context?.Connection.RemoteIpAddress?.MapToIPv4().ToString());
+                StringValues valuesUi = new();
+                var idUi = context?.Request.Query.TryGetValue(nameof(CookieName.AppId), out valuesUi);
+                Guid.TryParse(valuesUi.FirstOrDefault(), out var guidUi);
+                _logger.LogTrace(@"Закрыто подключение к хабу для {forUrl}, guid {guid}, назначенный ID {Id}, локальный хост {Host}", urlConnect, guidUi, Context.ConnectionId, context?.Request.Host);
+                RemoveFromGroup(urlConnect).Wait();
+
+            }
+            catch (Exception ex)
+            {
+                _logger.WriteLogError(ex, nameof(OnDisconnectedAsync));
+            }
+            return base.OnConnectedAsync();
+        }
+
+        public async Task AddToGroup(string groupName)
+        {
+            try
+            {
+                await Groups.AddToGroupAsync(Context.ConnectionId, groupName.Replace(".", "_"));
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, nameof(AddToGroup));
+            }
+        }
+
+        public async Task RemoveFromGroup(string groupName)
+        {
+            try
+            {
+                await Groups.RemoveFromGroupAsync(Context.ConnectionId, groupName.Replace(".", "_"));
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, nameof(RemoveFromGroup));
+            }
+        }
+
     }
 }

@@ -6,12 +6,12 @@
     <BodyContent>
         @if (!IsPageLoad)
         {
-            <form id="createsituation" @onsubmit="NextPage">
+            <BlazorLibrary.Shared.FormComponent.FormDefault OnSumbit="NextPage">
                 <div class="row">
                     <div class="col-md-6">
                         <div class="mb-2">
                             <label class="form-label">@AsoRep["NameSit"]</label>
-                            <InputFocus @bind-Value="NewSit.SitName" />
+                            <InputFocus @bind-Value="NewSit.SitName" maxlength="255" required />
                         </div>
                         <div class="mb-2">
                             <label class="form-label">@AsoRep["CommSit"]</label>
@@ -23,7 +23,7 @@
                             @*Приоритет*@
                             <div class="col-md-4">
                                 <label class="form-label">@AsoRep["IDS_ABPRIORITY"]</label>
-                                <input type="number" min=1 max=50 class="form-control" @bind="NewSit.SitPriority">
+                                <input type="number" min=1 max=50 class="form-control" @bind="NewSit.SitPriority" required>
                             </div>
                             @*Настройки*@
                             <div class="col-md-8">
@@ -42,7 +42,7 @@
                         </div>
 
 
-                        @if (SubsystemID == SubsystemType.SUBSYST_SZS)
+                        @if (SystemId == SubsystemType.SUBSYST_SZS)
                         {
                             <div class="mb-2">
                                 <label class="form-label">@GsoRep["IDS_COMMAND"]</label>
@@ -52,7 +52,7 @@
                                 </select>
                             </div>
                         }
-                        else if (SubsystemID == SubsystemType.SUBSYST_ASO)
+                        else if (SystemId == SubsystemType.SUBSYST_ASO)
                         {
 
                             <div class="row mb-2">
@@ -74,52 +74,52 @@
 
                     </div>
                 </div>
-            </form>
-            <ListTreeNew Folders="Folders" SelectItems="SelectFolders" ListId="SitId" IsCreateList="false" IsReadOnly="IsReadOnly">
-                <AddTopContent>
-                    @if (IsViewSpecification)
-                    {
-                        <FiltrTable AddItemFiltr="AddItemFiltr" RemoveItemsFiltr="RemoveItemsFiltr" Items="FiltrItems" Hints="HintItems" PlaceHolder="@PlaceHolder" />
-                    }
-                </AddTopContent>
-                <AddBackButons>
-                    @if (CallbackEvent.HasDelegate)
-                    {
-                        <BCancel OnClick="@GoCallBack" />
-                        @if (!IsReadOnly)
+                <ListTreeNew Folders="Folders" SelectItems="SelectFolders" ListId="SitId" IsCreateList="false" IsReadOnly="IsReadOnly">
+                    <AddTopContent>
+                        @if (IsViewSpecification)
                         {
-                            <DropdownMenu TextButton="@UUZSRep["IDS_STRING_ADD"]">
-                                <ChildButton>
-                                    @if (SubsystemID == SubsystemType.SUBSYST_ASO)
-                                    {
-                                        @*Add abonent*@
-                                        <li><span hotkey="@KeyCode.AddAbon" class="dropdown-item pointer" @onclick="@(()=>Abon=0)">@StartUIRep["IDS_ABONENTNAME"]</span></li>
-                                        @*Add list*@
-                                        <li><span hotkey="@KeyCode.AddListAbon" class="dropdown-item pointer" @onclick="@(()=>IsAddListAbon=true)">@GsoRep["IDS_ABONENTLIST"]</span></li>
-                                    }
-                                    else if (SubsystemID == SubsystemType.SUBSYST_SZS)
-                                    {
-                                        @*Добавить оконечное устройство*@
-                                        <li><span hotkey="@KeyCode.AddAbon" class="dropdown-item pointer" @onclick="@(()=>IsCreateDevice=true)">@GsoRep["IDS_DEVICE"]</span></li>
-                                        @*Добавить список*@
-                                        <li><span hotkey="@KeyCode.AddListAbon" class="dropdown-item pointer" @onclick="@(()=>IsAddListAbon=true)">@GsoRep["IDS_DEVICELIST"]</span></li>
-                                        @*Добавить групп*@
-                                        <li><span hotkey="@KeyCode.AddListAbon" class="dropdown-item pointer" @onclick="@(()=>IsCreateGroup=true)">@GsoRep["IDS_DEVICEGROUP"]</span></li>
-                                    }
-                                </ChildButton>
-                            </DropdownMenu>
+                            <FiltrTable AddItemFiltr="AddItemFiltr" RemoveItemsFiltr="RemoveItemsFiltr" Items="FiltrItems" Hints="HintItems" PlaceHolder="@PlaceHolder" />
                         }
-                    }
-                </AddBackButons>
-                <AddNextButons>
-                    @if (context.Any() && !string.IsNullOrEmpty(NewSit.SitName))
-                    {
-                        <CheckP BitPosList="@(new[]{NameBitsPos.Create, NameBitsPos.CreateNoStandart})">
-                            <BSumbit FormId="createsituation" Text="@GsoRep["IDS_STRING_NEXT"]" AddClass="m-1 ms-auto" />
-                        </CheckP>
-                    }
-                </AddNextButons>
-            </ListTreeNew>
+                    </AddTopContent>
+                    <AddBackButons>
+                        @if (CallbackEvent.HasDelegate)
+                        {
+                            <BCancel OnClick="@GoCallBack" />
+                            @if (!IsReadOnly)
+                            {
+                                <DropdownMenu TextButton="@UUZSRep["IDS_STRING_ADD"]">
+                                    <ChildButton>
+                                        @if (SystemId == SubsystemType.SUBSYST_ASO)
+                                        {
+                                            @*Add abonent*@
+                                            <li><span hotkey="@KeyCode.AddAbon" class="dropdown-item pointer" @onclick="@(()=>Abon=0)">@StartUIRep["IDS_ABONENTNAME"]</span></li>
+                                            @*Add list*@
+                                            <li><span hotkey="@KeyCode.AddListAbon" class="dropdown-item pointer" @onclick="@(()=>IsAddListAbon=true)">@GsoRep["IDS_ABONENTLIST"]</span></li>
+                                        }
+                                        else if (SystemId == SubsystemType.SUBSYST_SZS)
+                                        {
+                                            @*Добавить оконечное устройство*@
+                                            <li><span hotkey="@KeyCode.AddAbon" class="dropdown-item pointer" @onclick="@(()=>IsCreateDevice=true)">@GsoRep["IDS_DEVICE"]</span></li>
+                                            @*Добавить список*@
+                                            <li><span hotkey="@KeyCode.AddListAbon" class="dropdown-item pointer" @onclick="@(()=>IsAddListAbon=true)">@GsoRep["IDS_DEVICELIST"]</span></li>
+                                            @*Добавить групп*@
+                                            <li><span hotkey="@KeyCode.AddListAbon" class="dropdown-item pointer" @onclick="@(()=>IsCreateGroup=true)">@GsoRep["IDS_DEVICEGROUP"]</span></li>
+                                        }
+                                    </ChildButton>
+                                </DropdownMenu>
+                            }
+                        }
+                    </AddBackButons>
+                    <AddNextButons Context="resultList">
+                        @if (resultList.Any() && !string.IsNullOrEmpty(NewSit.SitName))
+                        {
+                            <CheckP BitPosList="@(new[]{NameBitsPos.Create, NameBitsPos.CreateNoStandart})">
+                                <BSumbit IsProcessing="context" Text="@GsoRep["IDS_STRING_NEXT"]" AddClass="m-1 ms-auto" />
+                            </CheckP>
+                        }
+                    </AddNextButons>
+                </ListTreeNew>
+            </BlazorLibrary.Shared.FormComponent.FormDefault>
         }
         else
         {
@@ -132,7 +132,7 @@
     @*Добавить устройство*@
     @if (IsCreateDevice == true)
     {
-        <CreateDeviceSZS CallBack="()=>IsCreateDevice=false" DevType="1" DeviceObj_ID="@(new OBJ_ID(){ StaffID=StaffId, SubsystemID=SubsystemID})" />
+        <CreateDeviceSZS CallBack="()=>IsCreateDevice=false" DevType="1" DeviceObj_ID="@(new OBJ_ID(){ StaffID=StaffId, SubsystemID=SystemId})" />
     }
     @*Добавить группу*@
     @if (IsCreateGroup == true)
@@ -161,11 +161,11 @@
     @*Следущая страница*@
     @if (ViewMessageList)
     {
-        @if (SubsystemID == SubsystemType.SUBSYST_ASO)
+        @if (SystemId == SubsystemType.SUBSYST_ASO)
         {
             <AsoPage MsgID="MsgID" NextAction="SaveSit" IsReadOnly="IsReadOnly" />
         }
-        else if (SubsystemID == SubsystemType.SUBSYST_SZS)
+        else if (SystemId == SubsystemType.SUBSYST_SZS)
         {
             <SzsPage IsIndividualMode="@(IsIndividualMode==1?true:false)" ObjectList="SelectFolders?.SelectMany(x=>x.Child).ToList()" IsReadOnly="IsReadOnly" NextAction="SaveSitSzs" />
         }

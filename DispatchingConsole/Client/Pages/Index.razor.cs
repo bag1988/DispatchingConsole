@@ -48,7 +48,17 @@ namespace DispatchingConsole.Client.Pages
         List<ConnectInfo>? NewItemConnect = null;
         List<ContactInfo>? SelectListConnect = null;
 
-        string? UserName { get; set; }
+        string? UserName
+        {
+            get
+            {
+                return _webRtc.UserName;
+            }
+            set
+            {
+                _webRtc.UserName = value;
+            }
+        }
 
         public bool _shouldPreventDefault = false;
         ChatInfo? SelectConnect
@@ -92,7 +102,7 @@ namespace DispatchingConsole.Client.Pages
 
             await _webRtc.OnStartListenLocalHub(_appId);
             if (Layout != null)
-                await Layout.LoadFirstLevel(UserName);
+                await Layout.LoadFirstLevel();
             _webRtc.CallBackUpdateView = StateHasChanged;
             await _webRtc.OnLoadMissedCall();
 
@@ -106,18 +116,6 @@ namespace DispatchingConsole.Client.Pages
             TimerRecord.Elapsed += _timer_Elapsed;
 
             await OnInitFiltr(RefreshMessages, FiltrName.FiltrMessagesPods);
-
-            try
-            {
-                var _jsModele = await JSRuntime.InvokeAsync<IJSObjectReference>("import", $"./js/registerEventsForUploadFile.js?v={AssemblyNames.GetVersionPKO}");               
-                await _jsModele.InvokeVoidAsync("registerEventsForUploadFile", "paste", "pastefiles");
-                await _jsModele.InvokeVoidAsync("registerEventsForUploadFile", "drop", "dropfiles");
-                await _jsModele.DisposeAsync();
-            }
-            catch (Exception ex)
-            {
-                _logger.LogError(@"Ошибка загрузки дополнительных модулей, {Message}", ex.Message);
-            }
         }
 
         private void _timer_Elapsed(object? sender, System.Timers.ElapsedEventArgs e)
@@ -145,7 +143,7 @@ namespace DispatchingConsole.Client.Pages
         {
             get
             {
-                return _webRtc.ContactList.Where(x => (UserName != x.UserName | !IpAddressUtilities.CompareForAuthority(x.AuthorityUrl, MyNavigationManager.BaseUri)) && (!NewItemConnect?.Select(n => $"{n.AuthorityUrl}&{n.UserName}").Contains($"{x.AuthorityUrl}&{x.UserName}") ?? true));
+                return _webRtc.ContactList.Where(x => (UserName != x.UserName | x.Type != TypeContact.Local) && (!NewItemConnect?.Select(n => $"{n.AuthorityUrl}&{n.UserName}").Contains($"{x.AuthorityUrl}&{x.UserName}") ?? true));
             }
         }
 
@@ -176,14 +174,14 @@ namespace DispatchingConsole.Client.Pages
         {
             if (NewItemConnect != null && SelectItemConnect?.Count > 0)
             {
-                NewItemConnect.RemoveAll(x => SelectItemConnect.Where(s => x.UserName != UserName | !IpAddressUtilities.CompareForAuthority(s.AuthorityUrl, MyNavigationManager.BaseUri)).Contains(x));
+                NewItemConnect.RemoveAll(x => SelectItemConnect.Where(s => x.UserName != UserName | !_webRtc.IsMyAuthorityUrl(s.AuthorityUrl)).Contains(x));
             }
             SelectItemConnect = null;
         }
 
         void SetSelectItemConnect(List<ConnectInfo>? items)
         {
-            SelectItemConnect = items?.Where(x => x.UserName != UserName | !IpAddressUtilities.CompareForAuthority(x.AuthorityUrl, MyNavigationManager.BaseUri)).ToList();
+            SelectItemConnect = items?.Where(x => x.UserName != UserName | !_webRtc.IsMyAuthorityUrl(x.AuthorityUrl)).ToList();
         }
 
         async Task SaveChangeItems()
@@ -211,7 +209,7 @@ namespace DispatchingConsole.Client.Pages
         {
             if (NewItemConnect != null)
             {
-                NewItemConnect.RemoveAll(s => s.UserName != UserName | !IpAddressUtilities.CompareForAuthority(s.AuthorityUrl, MyNavigationManager.BaseUri));
+                NewItemConnect.RemoveAll(s => s.UserName != UserName | !_webRtc.IsMyAuthorityUrl(s.AuthorityUrl));
             }
         }
 
@@ -238,12 +236,12 @@ namespace DispatchingConsole.Client.Pages
             }
         }
 
-        bool IsICreate => (SelectConnect != null && !SelectConnect.IsDefault && SelectConnect.UserCreate == UserName && IpAddressUtilities.CompareForAuthority(MyNavigationManager.BaseUri, SelectConnect.AuthorityCreate));
+        bool IsICreate => (SelectConnect != null && !SelectConnect.IsDefault && SelectConnect.UserCreate == UserName && _webRtc.IsMyAuthorityUrl(SelectConnect.AuthorityCreate));
 
         string? GetNameCU(string? url, string? userName)
         {
             string result = $"{url} - {userName}";
-            if (userName == UserName && IpAddressUtilities.CompareForAuthority(MyNavigationManager.BaseUri, url))
+            if (userName == UserName && _webRtc.IsMyAuthorityUrl(url))
             {
                 result = $"{DispRep["YOU"]} ({userName})";
             }
@@ -408,7 +406,7 @@ namespace DispatchingConsole.Client.Pages
             {
                 _logger.LogError(@"Error onsetfiles, {message}", ex.Message);
             }
-           
+
         }
 
         /// <summary>
@@ -600,10 +598,10 @@ namespace DispatchingConsole.Client.Pages
             if (_recordAudio != null)
             {
                 _recordAudio.DisposeAsync();
-            }           
+            }
             TimerRecord.Close();
 
-            return _webRtc.CloseAllConnect();
+            return _webRtc.DisposeIndexPage();
         }
     }
 }

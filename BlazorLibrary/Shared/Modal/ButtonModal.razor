@@ -1,6 +1,8 @@
 ﻿
-<div class="alert alert-secondary position-sticky bottom-0 p-2 mt-3 @AddClass">
-    @ChildContent
+<div class="alert alert-secondary position-sticky p-2 mt-3 @AddClass" style="bottom:0.5em">
+    <div class="d-flex flex-wrap align-items-center">
+        @ChildContent
+    </div>
 </div>
 
 @code {
@@ -8,5 +10,5 @@
     public RenderFragment? ChildContent { get; set; }
 
     [Parameter]
-    public string? AddClass{ get; set; }
+    public string? AddClass { get; set; }
 }

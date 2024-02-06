@@ -1,27 +1,20 @@
 ﻿using System.Linq;
 using System.Net.Http.Json;
 using BlazorLibrary.Models;
-using ArmODProto.V1;
 using SMSSGsoProto.V1;
 using UUZSDataProto.V1;
 using Microsoft.AspNetCore.Components;
 using SharedLibrary;
 using SMDataServiceProto.V1;
-using static BlazorLibrary.Shared.Main;
 using System.ComponentModel;
 using SharedLibrary.Interfaces;
-using Label.V1;
-using System.Diagnostics.Metrics;
-using static BlazorLibrary.Shared.ObjectTree.ListTreeNew;
 using AsoDataProto.V1;
+using BlazorLibrary.Helpers;
 
 namespace BlazorLibrary.Shared.ObjectTree
 {
     partial class ListTreeNew : IAsyncDisposable, IPubSubMethod
     {
-        [CascadingParameter]
-        public int SubSystemID { get; set; } = SubsystemType.SUBSYST_ASO;
-
         [Parameter]
         public RenderFragment? AddBackButons { get; set; }
 
@@ -45,6 +38,8 @@ namespace BlazorLibrary.Shared.ObjectTree
 
         [Parameter]
         public bool IsReadOnly { get; set; } = false;
+
+        int SystemId => ParseUrlSegments.GetSystemId(MyNavigationManager.Uri);
 
         List<Google.Protobuf.WellKnownTypes.Any>? SelectList { get; set; }
 
@@ -87,12 +82,12 @@ namespace BlazorLibrary.Shared.ObjectTree
         {
             if (IsCreateList)
             {
-                if (SubSystemID == SubsystemType.SUBSYST_ASO)
+                if (SystemId == SubsystemType.SUBSYST_ASO)
                 {
                     SelectTitle = GsoRep["IDS_STRING_AB_SELECTED_IN_LIST"];
                     ForSelectTitle = GsoRep["IDS_STRING_AB_LIST_CAPTION"];
                 }
-                else if (SubSystemID == SubsystemType.SUBSYST_SZS)
+                else if (SystemId == SubsystemType.SUBSYST_SZS)
                 {
                     SelectTitle = GsoRep["IDS_STRING_DEVICE_SELECTED_IN_LIST"];
                     ForSelectTitle = GsoRep["IDS_STRING_DEVICE_LIST_CAPTION"];
@@ -100,17 +95,17 @@ namespace BlazorLibrary.Shared.ObjectTree
             }
             else
             {
-                if (SubSystemID == SubsystemType.SUBSYST_ASO)
+                if (SystemId == SubsystemType.SUBSYST_ASO)
                 {
                     SelectTitle = GsoRep["IDS_STRING_AB_SELECTED"];
                     ForSelectTitle = GsoRep["IDS_STRING_LIST_AB_COMMON"];
                 }
-                else if (SubSystemID == SubsystemType.SUBSYST_GSO_STAFF)
+                else if (SystemId == SubsystemType.SUBSYST_GSO_STAFF)
                 {
                     SelectTitle = StaffRep["ListObjNotify"];
                     ForSelectTitle = StaffRep["ListObjManagement"];
                 }
-                else if (SubSystemID == SubsystemType.SUBSYST_SZS)
+                else if (SystemId == SubsystemType.SUBSYST_SZS)
                 {
                     SelectTitle = UUZSRep["DEVICE_SELECT_NOTIFY"];
                     ForSelectTitle = UUZSRep["GENERAL_LIST_DEVICE"];
@@ -124,7 +119,7 @@ namespace BlazorLibrary.Shared.ObjectTree
         {
             try
             {
-                if (SubSystemID == SubsystemType.SUBSYST_ASO)
+                if (SystemId == SubsystemType.SUBSYST_ASO)
                 {
                     var newItem = AbonentItem.Parser.ParseFrom(AbonentItemByte);
                     if (newItem?.IDAb > 0 && newItem.StaffID > 0)
@@ -195,7 +190,7 @@ namespace BlazorLibrary.Shared.ObjectTree
         [Description(DaprMessage.PubSubName)]
         public async Task Fire_InsertDeleteTermDevice(long Value)
         {
-            if (SubSystemID == SubsystemType.SUBSYST_SZS)
+            if (SystemId == SubsystemType.SUBSYST_SZS)
             {
                 if (Folders != null)
                 {
@@ -309,7 +304,7 @@ namespace BlazorLibrary.Shared.ObjectTree
 
             if (b)
             {
-                if (SubSystemID == SubsystemType.SUBSYST_SZS && obj.Type == ListType.LIST)
+                if (SystemId == SubsystemType.SUBSYST_SZS && obj.Type == ListType.LIST)
                 {
                     var elems = GetChildItems(obj)?.ToList();
                     if (elems?.Count > 0)
@@ -334,7 +329,7 @@ namespace BlazorLibrary.Shared.ObjectTree
 
             var keySzs = Folders?.FirstOrDefault(x => x.Type == ListType.LIST && key.OBJID.Equals(x.OBJID));
             int szsType = 0;
-            if (SubSystemID == SubsystemType.SUBSYST_SZS && !string.IsNullOrEmpty(key.Comm) && keySzs != null)
+            if (SystemId == SubsystemType.SUBSYST_SZS && !string.IsNullOrEmpty(key.Comm) && keySzs != null)
             {
                 int.TryParse(key.Comm, out szsType);
                 if (szsType > 0)
@@ -352,7 +347,7 @@ namespace BlazorLibrary.Shared.ObjectTree
 
             var ex = f?.Where(x => !s?.Any(r => r.AsoAbonID.Equals(x.AsoAbonID) && r.SZSDevID.Equals(x.SZSDevID) && r.SZSGroupID.Equals(x.SZSGroupID)) ?? true).ToList();
 
-            if (SubSystemID == SubsystemType.SUBSYST_SZS && szsType > 0)
+            if (SystemId == SubsystemType.SUBSYST_SZS && szsType > 0)
                 return ex?.Where(x => x.DevType == szsType);
             return ex;
         }
@@ -377,7 +372,7 @@ namespace BlazorLibrary.Shared.ObjectTree
 
             if (b)
             {
-                if (SubSystemID == SubsystemType.SUBSYST_SZS && obj.Type == ListType.LIST)
+                if (SystemId == SubsystemType.SUBSYST_SZS && obj.Type == ListType.LIST)
                 {
                     var elems = GetChildSelectFolder(obj)?.ToList();
                     if (elems?.Count > 0)
@@ -402,7 +397,7 @@ namespace BlazorLibrary.Shared.ObjectTree
 
             var keySzs = SelectItems?.FirstOrDefault(x => x.Key.Type == ListType.LIST && key.OBJID.Equals(x.Key.OBJID))?.Key;
             int szsType = 0;
-            if (SubSystemID == SubsystemType.SUBSYST_SZS && !string.IsNullOrEmpty(key.Comm) && keySzs != null)
+            if (SystemId == SubsystemType.SUBSYST_SZS && !string.IsNullOrEmpty(key.Comm) && keySzs != null)
             {
                 int.TryParse(key.Comm, out szsType);
                 if (szsType > 0)
@@ -411,7 +406,7 @@ namespace BlazorLibrary.Shared.ObjectTree
                     szsType = 0;
             }
 
-            if (SubSystemID == SubsystemType.SUBSYST_SZS && szsType > 0)
+            if (SystemId == SubsystemType.SUBSYST_SZS && szsType > 0)
                 return SelectItems?.FirstOrDefault(x => x.Key.Equals(key))?.Child?.Where(x => x.DevType == szsType);
             return SelectItems?.FirstOrDefault(x => x.Key.Equals(key))?.Child;
         }
@@ -563,7 +558,7 @@ namespace BlazorLibrary.Shared.ObjectTree
             {
                 var keySzs = Folders?.FirstOrDefault(x => x.Type == ListType.LIST && key.OBJID.Equals(x.OBJID));
                 int szsType = 0;
-                if (SubSystemID == SubsystemType.SUBSYST_SZS && !string.IsNullOrEmpty(key.Comm) && keySzs != null)
+                if (SystemId == SubsystemType.SUBSYST_SZS && !string.IsNullOrEmpty(key.Comm) && keySzs != null)
                 {
                     int.TryParse(key.Comm, out szsType);
                     if (szsType > 0)
@@ -619,7 +614,7 @@ namespace BlazorLibrary.Shared.ObjectTree
                     foreach (var f in folder)
                     {
                         var keySzs = SelectItems.FirstOrDefault(x => x.Key.Type == ListType.LIST && f.OBJID.Equals(x.Key.OBJID))?.Key;
-                        if (SubSystemID == SubsystemType.SUBSYST_SZS && !string.IsNullOrEmpty(f.Comm) && keySzs != null)
+                        if (SystemId == SubsystemType.SUBSYST_SZS && !string.IsNullOrEmpty(f.Comm) && keySzs != null)
                         {
                             int.TryParse(f.Comm, out var szsType);
                             if (szsType > 0)
@@ -704,23 +699,23 @@ namespace BlazorLibrary.Shared.ObjectTree
 
             if (c != null)
             {
-                if (SubSystemID == SubsystemType.SUBSYST_SZS)
+                if (SystemId == SubsystemType.SUBSYST_SZS)
                 {
                     IsDelete = true;
                     WarningDelete = UUZSRep["IDS_STRING_ERROR_DELETE"];
                 }
-                else if (SubSystemID == SubsystemType.SUBSYST_ASO)
+                else if (SystemId == SubsystemType.SUBSYST_ASO)
                 {
                     WarningDelete = AsoRep["AbonInSit"];
                 }
 
-                if (SubSystemID == SubsystemType.SUBSYST_ASO && IsDelete == false && IsCreateList && selectItem.Count == 1)
+                if (SystemId == SubsystemType.SUBSYST_ASO && IsDelete == false && IsCreateList && selectItem.Count == 1)
                 {
                     Abon = selectItem.First().AsoAbonID;
                 }
                 else
                 {
-                    if (((c.Key.Type == ListType.MAN && SubSystemID == SubsystemType.SUBSYST_ASO) || (c.Key.Type == ListType.MEN && SubSystemID == SubsystemType.SUBSYST_SZS)) && IsDelete == true && IsCreateList && ListId > 0)
+                    if (((c.Key.Type == ListType.MAN && SystemId == SubsystemType.SUBSYST_ASO) || (c.Key.Type == ListType.MEN && SystemId == SubsystemType.SUBSYST_SZS)) && IsDelete == true && IsCreateList && ListId > 0)
                     {
                         if (OnDelete == false && selectItem != null)
                         {

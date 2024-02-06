@@ -1,7 +1,7 @@
 ﻿@using StaffDataProto.V1;
 @using FiltersGSOProto.V1;
 @inherits FiltrInherits<GetItemsICUExResultFilter>
-<CheckP BitPos="NameBitsPos.ViewArhive">
+<CheckP BitPos="NameBitsPos.ViewArhive" SystemID="SubsystemType.SUBSYST_GSO_STAFF">
 
     @if (!IsPageLoad)
     {
@@ -20,7 +20,7 @@
             <td>@item.CUName</td>
             </Tbody>
             <TSticky>
-                <CheckP BitPos="4">
+                <CheckP BitPos="NameBitsPos.ViewObject" SystemID="SubsystemType.SUBSYST_GSO_STAFF">
                     <BPrint OnClick="GetReport" />
                 </CheckP>
             </TSticky>

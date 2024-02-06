@@ -75,34 +75,9 @@ namespace BlazorLibrary.ServiceColection
             }
         }
 
-        public async Task<int?> GetSubSystemIdAsync()
-        {
-            var s = await _jsRuntime.InvokeAsync<string>("localStorage.getItem", CookieName.SubsystemID);
-
-            int.TryParse(s, out var subSystemId);
-
-            if (subSystemId == 0)
-                subSystemId = SubsystemType.SUBSYST_ASO;
-
-            return subSystemId;
-        }
-
-        public async Task SetSubSystemIdAsync(int? subSystemId = null)
-        {
-            if (subSystemId == null)
-            {
-                await _jsRuntime.InvokeVoidAsync("localStorage.removeItem", CookieName.SubsystemID);
-            }
-            else
-            {
-                await _jsRuntime.InvokeVoidAsync("localStorage.setItem", CookieName.SubsystemID, subSystemId);
-            }
-        }
-
         public async Task RemoveAllAsync()
         {
             await SetTokenAsync();
-            await SetSubSystemIdAsync();
             await SetAppIdAsync();
         }
 
@@ -143,6 +118,13 @@ namespace BlazorLibrary.ServiceColection
             var list = await GetCurNotifySessID();
             list.RemoveAll(x => CurNotifySessIDList.Any(c => c.SubsystemID == x.SubsystemID));
             list.AddRange(CurNotifySessIDList);
+            await _jsRuntime.InvokeVoidAsync("localStorage.setItem", CookieName.CurNotifySessID, JsonSerializer.Serialize(list));
+        }
+
+        public async Task RemoveCurNotifySessIDForSubsystem(int subSystemId)
+        {
+            var list = await GetCurNotifySessID();
+            list.RemoveAll(x => subSystemId == x.SubsystemID);
             await _jsRuntime.InvokeVoidAsync("localStorage.setItem", CookieName.CurNotifySessID, JsonSerializer.Serialize(list));
         }
 

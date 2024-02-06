@@ -3,82 +3,80 @@
 
 <ModalDialog Title="@StaffRep["ListSitForNotify"]" ButtonCloseEvent="Cancel">
     <BodyContent>
-        @if (StaffList != null)
-        {
-            <TableDefault IsSetFocus="false" IsOnKeyDown="false" TItem="SituationItem" Colspan="5" Items="StaffList" SetSelectList="SetSelectList" SelectList="@(SelectItem!=null ? new (){SelectItem}:null)" MinWidth="0">
-                <Thead>
-                    <ThSort ThList="ThList" ThWidthProcent="@(new List<int>(){40,20,30,10})" />
-                </Thead>
-                <Tbody Context="item">
-                <td>@item.SitName</td>
-                <td>
-                        @if (item.SitID.SubsystemID == SubsystemType.SUBSYST_GSO_STAFF)
-                        {
-                            @*Глобальный номер*@
+        <BlazorLibrary.Shared.FormComponent.FormDefault OnSumbit="Next">
+            @if (StaffList != null)
+            {
+                <TableDefault IsSetFocus="false" IsOnKeyDown="false" TItem="SituationItem" Colspan="5" Items="StaffList" SetSelectList="SetSelectList" SelectList="@(SelectItem!=null ? new (){SelectItem}:null)" MinWidth="0">
+                    <Thead>
+                        <ThSort ThList="ThList" ThWidthProcent="@(new List<int>(){40,20,30,10})" />
+                    </Thead>
+                    <Tbody Context="item">
+                    <td>@item.SitName</td>
+                    <td>
+                            @if (item.SitID.SubsystemID == SubsystemType.SUBSYST_GSO_STAFF)
+                            {
+                                @*Глобальный номер*@
+                                @if (SelectItem?.Equals(item) ?? false)
+                                {
+                                <input type="number" @bind="item.SitID.ObjID" class="form-control form-control-sm" />
+                                }
+                                else
+                                {
+                                    @item.SitID.ObjID
+                                }
+                            }
+                    </td>
+                    <td>
                             @if (SelectItem?.Equals(item) ?? false)
                             {
-                            <input type="number" @bind="item.SitID.ObjID" class="form-control form-control-sm" />
+                            <select class="form-select form-select-sm" @bind="item.CustMsg.ObjID">
+                                <ItemsSelectMsg IsAllMsg="IsAllMsg" MsgList="MsgList" SubsystemID="SubsystemType.SUBSYST_GSO_STAFF" />
+                            </select>
                             }
                             else
                             {
-                                @item.SitID.ObjID
+                                @(MsgList?.FirstOrDefault(x => x.OBJID != null && x.OBJID.ObjID == item.CustMsg.ObjID)?.Name ?? "")
                             }
-                        }
-                </td>
-                <td>
-                        @if (SelectItem?.Equals(item) ?? false)
-                        {
-                        <select class="form-select form-select-sm" @bind="item.CustMsg.ObjID">
-                            <ItemsSelectMsg IsAllMsg="IsAllMsg" MsgList="MsgList" SubsystemID="SubsystemType.SUBSYST_GSO_STAFF" />
+                    </td>
+                    <td>
+                        <select class="form-select form-select-sm" @bind="item.ExInfoType">
+                            <option value="@((int)ExInfoType.IDS_EX_NONE)">@GsoRep["IDS_EX_NONE"]</option>@*Не собирать*@
+                            <option value="@((int)ExInfoType.IDS_EX_ALL)">@GsoRep["IDS_EX_ALL"]</option>@*Полная информация*@
+                            <option value="@((int)ExInfoType.IDS_EX_GLOBAL)">@GsoRep["IDS_EX_GLOBAL"]</option>@*Глобальные объекты*@
+                            <option value="@((int)ExInfoType.IDS_EX_FAIL)">@GsoRep["IDS_EX_FAIL"]</option>@*Неоповещенные объекты*@
                         </select>
-                        }
-                        else
-                        {
-                            @(MsgList?.FirstOrDefault(x => x.OBJID != null && x.OBJID.ObjID == item.CustMsg.ObjID)?.Name ?? "")
-                        }
-                </td>
-                <td>
-                    <select class="form-select form-select-sm" @bind="item.ExInfoType">
-                        <option value="@((int)ExInfoType.IDS_EX_NONE)">@GsoRep["IDS_EX_NONE"]</option>@*Не собирать*@
-                        <option value="@((int)ExInfoType.IDS_EX_ALL)">@GsoRep["IDS_EX_ALL"]</option>@*Полная информация*@
-                        <option value="@((int)ExInfoType.IDS_EX_GLOBAL)">@GsoRep["IDS_EX_GLOBAL"]</option>@*Глобальные объекты*@
-                        <option value="@((int)ExInfoType.IDS_EX_FAIL)">@GsoRep["IDS_EX_FAIL"]</option>@*Неоповещенные объекты*@
-                    </select>
-
-                </td>
-                </Tbody>
-            </TableDefault>
-        }
-        else
-        {
-            <PNoData />
-        }
-
-    </BodyContent>
-    <ButtonContent>
-        <div class="d-flex align-items-center">
-            <label class="form-check-label me-2">
-                <input class="form-check-input" type="checkbox" checked="@IsAllMsg" @onchange="@((e)=>SetAllView(e))"> @Rep["AllMessage"]
-            </label>
-            @if (IsReadOnly == false)
-            {
-                <BDark OnClick="@(()=>{ViewInfoMessage=true; IsNewMessage=true;})" Text="@GsoRep["ID_RECORD"]" />                
+                    </td>
+                    </Tbody>
+                </TableDefault>
             }
-            @if (SelectItem?.CustMsg != null && SelectItem.CustMsg.ObjID != 0)
+            else
             {
-                <BDark OnClick="@(()=>{ViewInfoMessage=true; IsNewMessage=false;})" Text="@AsoRep["ReadMessage"]" />
+                <PNoData />
             }
-            <div class="ms-auto">
+            <ButtonModal>
+                <label class="form-check-label me-2">
+                    <input class="form-check-input" type="checkbox" checked="@IsAllMsg" @onchange="@((e)=>SetAllView(e))"> @Rep["AllMessage"]
+                </label>
                 @if (IsReadOnly == false)
                 {
-                    <CheckP BitPosList="@(new[]{NameBitsPos.Create, NameBitsPos.CreateNoStandart})">
-                        <BDark Text="@GsoRep["IDS_STRING_NEXT"]" OnClick="Next" />
-                    </CheckP>
+                    <BDark OnClick="@(()=>{ViewInfoMessage=true; IsNewMessage=true;})" Text="@GsoRep["ID_RECORD"]" />
                 }
-                <BSecondary HotKey="@KeyCode.Escape" IsOutline="true" OnClick="Cancel" Text="@GsoRep["IDS_STRING_BACK"]" />
-            </div>
-        </div>        
-    </ButtonContent>
+                @if (SelectItem?.CustMsg != null && SelectItem.CustMsg.ObjID != 0)
+                {
+                    <BDark OnClick="@(()=>{ViewInfoMessage=true; IsNewMessage=false;})" Text="@AsoRep["ReadMessage"]" />
+                }
+                <div class="ms-auto">
+                    @if (IsReadOnly == false)
+                    {
+                        <CheckP BitPosList="@(new[]{NameBitsPos.Create, NameBitsPos.CreateNoStandart})">
+                            <BSumbit SetFocus="true" Text="@GsoRep["IDS_STRING_NEXT"]" IsProcessing="context" />
+                        </CheckP>
+                    }
+                    <BSecondary HotKey="@KeyCode.Escape" IsOutline="true" OnClick="Cancel" Text="@GsoRep["IDS_STRING_BACK"]" />
+                </div>
+            </ButtonModal>
+        </BlazorLibrary.Shared.FormComponent.FormDefault>
+    </BodyContent>
 </ModalDialog>
 
 <CheckP BitPosList="@(new[]{NameBitsPos.Create, NameBitsPos.CreateNoStandart})">

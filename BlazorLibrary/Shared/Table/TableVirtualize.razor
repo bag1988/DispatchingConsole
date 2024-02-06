@@ -1,8 +1,9 @@
 ﻿@using System.Globalization;
 @typeparam TItem
 @inherits TableVirtualizeParams<TItem>
+@inject ILogger<TableVirtualize<TItem>> _logger
 
-<div @ref="div" class="@(IsSticky == true?"table-scroll-v":"")  table-responsive" style="@(WindowHeight>0?$"max-height:{WindowHeight}px;":"") scroll-behavior: unset;">
+<DivScroll IsSticky="@IsSticky" IsMaxHeigth="@IsMaxHeigth" Devision="@Devision">
     <table class="table table-hover table-bordered table-virtualize" style="min-width: @(MinWidth)px;">
         <thead class="table-dark @(IsSticky==true? "position-sticky":"") top-0" style="z-index:2;">
             <tr>
@@ -53,4 +54,4 @@
             </tfoot>
         }
     </table>
-</div>
+</DivScroll>

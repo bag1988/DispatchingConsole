@@ -1,6 +1,9 @@
 ﻿using System;
 using System.ComponentModel;
+using System.Numerics;
 using System.Reflection;
+using BlazorLibrary.Models;
+using BlazorLibrary.Shared.Buttons;
 using FiltersGSOProto.V1;
 using Google.Protobuf;
 using Google.Protobuf.WellKnownTypes;
@@ -50,6 +53,8 @@ namespace DispatchingConsole.Client.WebRTC
 
         public ChatInfo? InCallingConnect { get; set; }
 
+        public string? UserName { get; set; }
+
         public string[] _audioExt = [".audio", ".mp3", ".wav", ".mpeg"];
         public string[] _videoExt = [".webm", ".video", ".mp4"];
         public string[] _imgExt = [".png", ".gif", ".jpeg", ".svg"];
@@ -59,7 +64,7 @@ namespace DispatchingConsole.Client.WebRTC
         public bool IsEditItemsConnect { get; set; } = false;
         public bool isDeleteChatRoom = false;
         private DotNetObjectReference<CommunicationService>? _jsThis { get; set; }
-              
+
         public List<ChatMessage>? CurrentChatMessages { get; set; } = null;
 
         public string TempMessage = string.Empty;
@@ -68,12 +73,14 @@ namespace DispatchingConsole.Client.WebRTC
 
         IJSObjectReference? _observer = null;
 
+        IJSObjectReference? _push = null;
+
         readonly NavigationManager MyNavigationManager;
 
         readonly IJSRuntime JSRun;
 
         public Action? CallBackUpdateView { get; set; }
-        
+
         HubConnection _myHub = default!;
 
         public List<ContactInfo> ContactList { get; set; } = new();
@@ -87,6 +94,8 @@ namespace DispatchingConsole.Client.WebRTC
         readonly int BufferSizeSignal = 24000;
         private System.Threading.Channels.Channel<byte[]>? channelForRecord;
         private System.Threading.Channels.Channel<byte[]>? channelForUpload;
+
+        public string MyAuthorityUrl = string.Empty;
 
         public CommunicationService(NavigationManager myNavigationManager, IJSRuntime jSRuntime, ILogger<CommunicationService> logger)
         {
@@ -103,6 +112,7 @@ namespace DispatchingConsole.Client.WebRTC
             _myHub.On<IEnumerable<ContactInfo>?>("AddOrUpdateContactList", AddOrUpdateContactList);
             _myHub.On<ContactInfo>("AddOrUpdateContact", AddOrUpdateContact);
             _myHub.On<string, string, DateTime>("UpdateListActiveContact", UpdateListActiveContact);
+            _myHub.On<string?>(nameof(DaprMessage.Fire_ShowPushNotify), Fire_ShowPushNotify);
             _myHub.On<string, string>("DeleteContactNotify", DeleteContactNotify);
             _myHub.On<Guid>("DeleteChatForKey", DeleteChatForKey);
             _myHub.On<Guid>("AddNoReadMessage", AddNoReadMessage);
@@ -121,6 +131,7 @@ namespace DispatchingConsole.Client.WebRTC
             {
                 _jsModuleRtc = await JSRun.InvokeAsync<IJSObjectReference>("import", $"./js/CommunicationService.js?v={AssemblyNames.GetVersionPKO}");
                 _observer = await JSRun.InvokeAsync<IJSObjectReference>("import", $"./js/CreateObserver.js?v={AssemblyNames.GetVersionPKO}");
+                _push = await JSRun.InvokeAsync<IJSObjectReference>("import", $"./js/push.js?v={AssemblyNames.GetVersionPKO}");
                 _jsThis = DotNetObjectReference.Create(this);
 
                 _ = _jsModuleRtc.InvokeVoidAsync("initialize", _jsThis, localIdPlayer, remoteIdPlayerArray);
@@ -150,18 +161,19 @@ namespace DispatchingConsole.Client.WebRTC
             try
             {
                 ConnectList = new();
-                if (_appId != appId)
-                {
-                    _appId = appId;
-                    if (_myHub != null)
-                    {
-                        await _myHub.StopAsync();
-                        await _myHub.DisposeAsync();
-                    }
-                    var absoluteUri = MyNavigationManager.ToAbsoluteUri($"/CommunicationChatHub?{nameof(CookieName.AppId)}={appId}");
-                    _myHub = new HubConnectionBuilder().WithUrl(absoluteUri).WithAutomaticReconnect().Build();
-                    SubscribeAsync();
 
+                _appId = appId;
+                if (_myHub != null)
+                {
+                    await _myHub.StopAsync();
+                    await _myHub.DisposeAsync();
+                }
+                var absoluteUri = MyNavigationManager.ToAbsoluteUri($"/CommunicationChatHub?{nameof(CookieName.AppId)}={appId}");
+                _myHub = new HubConnectionBuilder().WithUrl(absoluteUri).WithAutomaticReconnect().Build();
+                SubscribeAsync();
+
+                if (_myHub.State != HubConnectionState.Connected)
+                {
                     await _myHub.StartAsync();
                 }
 
@@ -180,6 +192,8 @@ namespace DispatchingConsole.Client.WebRTC
                 }
 
                 NoReadMessages = await InvokeCoreHubAsync<Dictionary<Guid, int>?>("GetCountNoReadMessages", Array.Empty<object>()) ?? new();
+
+                MyAuthorityUrl = await InvokeCoreHubAsync<string?>("GetLocalAuthorityUrl", Array.Empty<object>()) ?? MyNavigationManager.BaseUri;
 
             }
             catch (Exception ex)
@@ -224,6 +238,23 @@ namespace DispatchingConsole.Client.WebRTC
         }
 
         [Description(DaprMessage.PubSubName)]
+        public async Task Fire_ShowPushNotify(string? json)
+        {
+            try
+            {
+                _logger.LogTrace("Получено уведомление {json}", json);
+                if (!string.IsNullOrEmpty(json) && _push != null)
+                {
+                    await _push.InvokeVoidAsync("SendPush", json);
+                }
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex.Message);
+            }
+        }
+
+        [Description(DaprMessage.PubSubName)]
         public Task UpdateListActiveContact(string authorityUrl, string userName, DateTime lastActive)
         {
             try
@@ -256,19 +287,35 @@ namespace DispatchingConsole.Client.WebRTC
                     bool isUpdateChatRoom = false;
                     lock (ContactList)
                     {
+                        List<ContactInfo>? newData = null;
+                        IEnumerable<ContactInfo>? updateData = null;
+                        IEnumerable<ContactInfo>? deleteData = null;
                         if (list.First().Type == TypeContact.Local)
                         {
-                            var deleteData = ContactList.Where(x => x.Type == TypeContact.Local).ToList().ExceptBy(list.Select(x => $"{x.AuthorityUrl}&{x.UserName}"), x => $"{x.AuthorityUrl}&{x.UserName}");
-                            ContactList.RemoveAll(x => deleteData.Contains(x));
+                            deleteData = ContactList.Where(x => x.Type == TypeContact.Local).ToList().ExceptBy(list.Select(x => x.UserName), x => x.UserName);
+
+                            newData = list.ExceptBy(ContactList.Where(x => x.Type == TypeContact.Local).Select(x => x.UserName), x => x.UserName).ToList();
+
+                            updateData = ContactList.Where(x => x.Type == TypeContact.Local).IntersectBy(list.Select(x => x.UserName), x => x.UserName);
                         }
                         else
                         {
-                            var deleteData = ContactList.Where(x => x.Type == TypeContact.Remote && list.Any(l => l.AuthorityUrl == x.AuthorityUrl)).ToList().ExceptBy(list.Select(x => $"{x.AuthorityUrl}&{x.UserName}"), x => $"{x.AuthorityUrl}&{x.UserName}");
-                            ContactList.RemoveAll(x => deleteData.Contains(x));
+                            deleteData = ContactList.Where(x => x.Type != TypeContact.Local && list.Any(l => l.AuthorityUrl == x.AuthorityUrl)).ToList().ExceptBy(list.Select(x => $"{x.AuthorityUrl}&{x.UserName}"), x => $"{x.AuthorityUrl}&{x.UserName}");
+                            newData = list.ExceptBy(ContactList.Where(x => x.Type != TypeContact.Local).Select(x => $"{x.AuthorityUrl}&{x.UserName}"), x => $"{x.AuthorityUrl}&{x.UserName}").ToList();
+
+                            updateData = ContactList.Where(x => x.Type != TypeContact.Local).IntersectBy(list.Select(x => $"{x.AuthorityUrl}&{x.UserName}"), x => $"{x.AuthorityUrl}&{x.UserName}");
                         }
 
-                        var newData = list.ExceptBy(ContactList.Select(x => $"{x.AuthorityUrl}&{x.UserName}"), x => $"{x.AuthorityUrl}&{x.UserName}").ToList();
-                        var updateData = ContactList.IntersectBy(list.Select(x => $"{x.AuthorityUrl}&{x.UserName}"), x => $"{x.AuthorityUrl}&{x.UserName}");
+                        if (deleteData.Any())
+                        {
+                            ContactList.RemoveAll(x => deleteData.Contains(x));
+
+                            if (deleteData.Any(x => x.UserName == UserName && IsMyAuthorityUrl(x.AuthorityUrl)))
+                            {
+                                JSRun.InvokeVoidAsync("localStorage.removeItem", CookieName.Token);
+                                MyNavigationManager.NavigateTo("/", true, true);
+                            }
+                        }
 
                         if (newData?.Count > 0)
                         {
@@ -282,7 +329,12 @@ namespace DispatchingConsole.Client.WebRTC
                         {
                             foreach (var item in updateData)
                             {
-                                item.LastActive = list.FirstOrDefault(x => x.AuthorityUrl == item.AuthorityUrl && x.UserName == item.UserName)?.LastActive;
+                                var first = list.FirstOrDefault(x => x.AuthorityUrl == item.AuthorityUrl && x.UserName == item.UserName);
+                                if (first != null)
+                                {
+                                    var forUpdate = ContactList.FirstOrDefault(x => x.AuthorityUrl == item.AuthorityUrl && x.UserName == item.UserName);
+                                    forUpdate = new(first.Name, first.AuthorityUrl, first.UserName, first.StaffId, first.LastActive);
+                                }
                             }
                         }
                     }
@@ -345,7 +397,7 @@ namespace DispatchingConsole.Client.WebRTC
                 {
                     if (CurrentChatMessages == null)
                         CurrentChatMessages = new();
-                    CurrentChatMessages.Insert(0, message);
+                    CurrentChatMessages.Add(message);
                     AllCount++;
                     await SendCoreHubAsync("RemoveNoReadMessage", [keyChatRoom]);
                 }
@@ -371,7 +423,8 @@ namespace DispatchingConsole.Client.WebRTC
                 _ = ScrollToElement(true);
                 if (!string.IsNullOrEmpty(message.Url) && _audioExt.Contains(Path.GetExtension(message.Url).ToLower()))
                 {
-                    _ = ReloadFirstAudioPlayer();
+                    await Task.Yield();
+                    await ReloadLastPlayer(message.Url);
                 }
             }
         }
@@ -726,25 +779,38 @@ namespace DispatchingConsole.Client.WebRTC
             try
             {
                 await Task.Yield();
-
                 if (isCheckScroll == true)
                 {
-                    //var parent = await JSRun.InvokeAsync<IJSObjectReference>("document.querySelector", ".table-scroll-v");
+                    await using var parent = await JSRun.InvokeAsync<IJSObjectReference>("document.querySelector", ".table-scroll-v");
 
-                    //if (parent != null)
-                    //{
-                    //    var heigth = await parent.InvokeAsync<string?>("scrollHeight.toString");
+                    if (parent != null)
+                    {
+                        var tBounding = await parent.InvokeAsync<BoundingClientRect?>("getBoundingClientRect");
 
-                    //    await parent.DisposeAsync();
-                    //}
+                        await using var lastChild = await parent.InvokeAsync<IJSObjectReference>("querySelector", ".message-container:last-child");
 
+                        if (lastChild != null)
+                        {
+                            var lBounding = await lastChild.InvokeAsync<BoundingClientRect?>("getBoundingClientRect");
+
+                            if (lBounding?.top > tBounding?.bottom)
+                            {
+                                return;
+                            }
+
+                            await lastChild.DisposeAsync();
+                        }
+                        await parent.DisposeAsync();
+                    }
                 }
-
-                var div = await JSRun.InvokeAsync<IJSObjectReference?>("document.querySelector", "div.message-container:first-of-type");
-                if (div != null)
+                if (CurrentChatMessages?.Count > 0)
                 {
-                    await div.InvokeVoidAsync("scrollIntoView", "{ behavior: \"smooth\" }");
-                    await div.DisposeAsync();
+                    var div = await JSRun.InvokeAsync<IJSObjectReference?>("document.querySelector", "div.message-container:last-of-type");
+                    if (div != null)
+                    {
+                        await div.InvokeVoidAsync("scrollIntoView", "{ behavior: \"smooth\" }");
+                        await div.DisposeAsync();
+                    }
                 }
             }
             catch (Exception ex)
@@ -752,23 +818,37 @@ namespace DispatchingConsole.Client.WebRTC
                 _logger.LogError($"ScrollToElement {ex.Message}");
             }
         }
-
-        public async Task ReloadFirstAudioPlayer()
+        public async Task SetObjObserver()
         {
             try
             {
-                await Task.Yield();
-                var container = await JSRun.InvokeAsync<IJSObjectReference?>("document.querySelector", ".message-container:has(audio)");
-                if (container != null)
+                if (_observer != null && AllCount > CurrentChatMessages?.Count)
                 {
-                    var player = await container.InvokeAsync<IJSObjectReference?>("querySelector", "audio");
-                    if (player != null)
+                    await Task.Delay(1000);
+                    var div = await JSRun.InvokeAsync<IJSObjectReference?>("document.querySelector", $"div.message-container:first-of-type");
+                    if (div != null)
                     {
-                        await player.InvokeVoidAsync("load");
-                        await player.DisposeAsync();
+                        await _observer.InvokeVoidAsync("CreateObserver.startObserver", div, SelectConnect?.Key);
+                        await div.DisposeAsync();
                     }
-                    await container.DisposeAsync();
+                }
+            }
+            catch (Exception ex)
+            {
+                Console.Write($"SetObjObserver {ex.Message}");
+            }
+        }
 
+        public async Task ReloadLastPlayer(string fileName)
+        {
+            try
+            {
+                var name = Path.GetFileName(fileName.Replace(@"\", "/"));
+                var player = await JSRun.InvokeAsync<IJSObjectReference?>("document.querySelector", $":is(audio:has(source[src$='{name}']), video:has(source[src$='{name}']))");
+                if (player != null)
+                {
+                    await player.InvokeVoidAsync("load");
+                    await player.DisposeAsync();
                 }
             }
             catch (Exception ex)
@@ -954,7 +1034,7 @@ namespace DispatchingConsole.Client.WebRTC
                     {
                         var addMessage = newData.Messages.Except(CurrentChatMessages).ToList();
 
-                        CurrentChatMessages.AddRange(addMessage);
+                        CurrentChatMessages.InsertRange(0, addMessage);
 
                         if (newData.AllCount > CurrentChatMessages?.Count)
                         {
@@ -979,27 +1059,6 @@ namespace DispatchingConsole.Client.WebRTC
             if (SelectConnect != null)
             {
                 _ = LoadMessageForChat(SelectConnect.Key);
-            }
-        }
-
-        public async Task SetObjObserver()
-        {
-            try
-            {
-                if (_observer != null && AllCount > CurrentChatMessages?.Count && CurrentChatMessages?.Count > 10)
-                {
-                    await Task.Delay(1000);
-                    var div = await JSRun.InvokeAsync<IJSObjectReference?>("document.querySelector", $"div.message-container:nth-of-type({CurrentChatMessages.Count - 10})");
-                    if (div != null)
-                    {
-                        await _observer.InvokeVoidAsync("CreateObserver.startObserver", div, SelectConnect?.Key);
-                        await div.DisposeAsync();
-                    }
-                }
-            }
-            catch (Exception ex)
-            {
-                Console.Write($"SetObjObserver {ex.Message}");
             }
         }
 
@@ -1198,21 +1257,15 @@ namespace DispatchingConsole.Client.WebRTC
 
 
         [JSInvokable]
-        public async Task StopStreamToFile()
+        public async Task StopStreamToFile(string fileName)
         {
             if (channelForRecord != null)
             {
                 await Task.Delay(1000);
                 channelForRecord.Writer.TryComplete();
-
                 try
                 {
-                    var player = await JSRun.InvokeAsync<IJSObjectReference?>("document.querySelector", "div.message-container video");
-                    if (player != null)
-                    {
-                        await player.InvokeVoidAsync("load");
-                        await player.DisposeAsync();
-                    }
+                    await ReloadLastPlayer(fileName);
                 }
                 catch (Exception ex)
                 {
@@ -1258,6 +1311,16 @@ namespace DispatchingConsole.Client.WebRTC
             }
         }
 
+        public async ValueTask DisposeIndexPage()
+        {
+            NoReadMessages.Clear();
+            _SelectConnect = null;
+            ConnectList.Clear();
+            ContactList.Clear();
+            await CloseAllConnect();
+            await _myHub.StopAsync();
+        }
+
         public async ValueTask DisposeAsync()
         {
             await CloseAllConnect();
@@ -1269,7 +1332,16 @@ namespace DispatchingConsole.Client.WebRTC
                 await playerCaller.DisposeAsync();
             if (_observer != null)
                 await _observer.DisposeAsync();
+            if (_push != null)
+                await _push.DisposeAsync();
             await _myHub.DisposeAsync();
         }
+
+        public bool IsMyAuthorityUrl(string? url)
+        {
+            if (string.IsNullOrWhiteSpace(url)) return false;
+            return (IpAddressUtilities.CompareForHost(url, "localhost") || IpAddressUtilities.CompareForHost(url, "127.0.0.1") || IpAddressUtilities.CompareForHost(url, "0.0.0.0") || IpAddressUtilities.CompareForHost(url, MyAuthorityUrl));
+        }
+
     }
 }

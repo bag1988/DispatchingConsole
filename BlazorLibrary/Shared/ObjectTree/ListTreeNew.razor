@@ -24,7 +24,7 @@
                     }
                 </ContentView>
             </TreeListUnlimit>
-            <PSticky Color="secondary text-end" StyleBottom="0">
+            <ButtonModal AddClass="text-end">
                 @AddBackButons
                 @if (!IsReadOnly)
                 {
@@ -52,7 +52,7 @@
                         }
                     </div>
                 }
-            </PSticky>
+            </ButtonModal>
         </DivScroll>
     </div>
     <div class="col-md-6">
@@ -80,7 +80,7 @@
             @if (SelectItems != null)
             {
                 <CheckP BitPosList="@(new[]{NameBitsPos.Create, NameBitsPos.CreateNoStandart})">
-                    <PSticky Color="secondary" StyleBottom="0">
+                    <ButtonModal>
                         @if (!IsReadOnly)
                         {
                             @*Удалить все объекты из списка*@
@@ -94,7 +94,7 @@
                             </BSecondary>
                         }
                         @AddNextButons?.Invoke(SelectItems)
-                    </PSticky>
+                    </ButtonModal>
                 </CheckP>
             }
 

@@ -28,8 +28,6 @@ namespace BlazorLibrary.Shared.Abonent
 
         private bool AddPassword = false;
 
-        bool IsProcessing = false;
-
         private string TitleError = "";
 
         private int LocalStaff = 0;
@@ -92,7 +90,6 @@ namespace BlazorLibrary.Shared.Abonent
 
         private async Task SetAbInfo()
         {
-            IsProcessing = true;
             if (ModelList != null)
             {
                 if (!OldModel.Equals(Model))
@@ -169,7 +166,6 @@ namespace BlazorLibrary.Shared.Abonent
             }
             IsSave = false;
             await CallBackOn(true);
-            IsProcessing = false;
         }
 
 

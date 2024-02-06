@@ -56,18 +56,18 @@ namespace BlazorLibrary.FolderForInherits
                 return;
             }
 
-            if (e.Code == "Enter")
+            if (e.Key == "Enter")
             {
                 await DbCallback();
                 return;
             }
-            else if (e.Code == "ArrowUp" || e.Code == "ArrowDown")
+            else if (e.Key == "ArrowUp" || e.Key == "ArrowDown")
             {
                 _shouldPreventDefault = true;
                 if (Items == null || !Items.Any())
                     return;
 
-                var index = e.Code == "ArrowUp" ? -1 : 1;
+                var index = e.Key == "ArrowUp" ? -1 : 1;
 
                 TItem? newSelect;
 

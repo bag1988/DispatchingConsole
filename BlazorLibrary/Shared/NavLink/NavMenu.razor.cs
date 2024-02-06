@@ -1,14 +1,11 @@
 ﻿using System.ComponentModel;
 using System.Net.Http.Json;
-using System.Reflection;
 using Microsoft.AspNetCore.Components;
 using Microsoft.AspNetCore.Components.Web;
-using Microsoft.AspNetCore.SignalR.Client;
+using Microsoft.Extensions.Logging;
 using Microsoft.JSInterop;
 using SensorM.GsoCore.SharedLibrary;
 using SharedLibrary;
-using SharedLibrary.Interfaces;
-using SMDataServiceProto.V1;
 
 namespace BlazorLibrary.Shared.NavLink
 {
@@ -37,42 +34,33 @@ namespace BlazorLibrary.Shared.NavLink
 
         private ElementReference div = default!;
 
-        private int WindowHeight = 800;
-
         protected override async Task OnInitializedAsync()
-        {
-            await Task.Run(() =>
-            {
-                timer.Elapsed += (sender, eventArgs) =>
-                {
-                    dateNow = DateTime.Now;
-                    StateHasChanged();
-                };
-                timer.Start();
-            });
-            await PVersionFull();
-        }
-
-        protected override async Task OnParametersSetAsync()
         {
             try
             {
-                await Task.Yield();
-                var d = await JSRuntime.InvokeAsync<double>("GetWindowHeight", div);
-
-                WindowHeight = (int)Math.Truncate(d);
+                await Task.Run(() =>
+                {
+                    timer.Elapsed += (sender, eventArgs) =>
+                    {
+                        dateNow = DateTime.Now;
+                        StateHasChanged();
+                    };
+                    timer.Start();
+                });
+                await PVersionFull();
             }
             catch (Exception ex)
             {
-                Console.WriteLine(ex.Message);
+                _logger.LogError(ex.Message);
             }
+
         }
 
         public async Task KeySet(KeyboardEventArgs e)
         {
-            if (e.Code == "ArrowUp" || e.Code == "ArrowDown")
+            if (e.Key == "ArrowUp" || e.Key == "ArrowDown")
             {
-                var index = e.Code == "ArrowUp" ? -1 : 1;
+                var index = e.Key == "ArrowUp" ? -1 : 1;
                 await JSRuntime.InvokeVoidAsync("HotKeys.SetFocusLink", div, index);
             }
         }
@@ -92,10 +80,10 @@ namespace BlazorLibrary.Shared.NavLink
                     PVersion = await result.Content.ReadFromJsonAsync<ProductVersion>();
                 }
             }
-            catch(Exception ex)
+            catch (Exception ex)
             {
                 Console.WriteLine(ex.Message);
-            }            
+            }
         }
 
         string? GetVersionUi
@@ -154,11 +142,11 @@ namespace BlazorLibrary.Shared.NavLink
 
         public ValueTask DisposeAsync()
         {
-            lock(timer)
+            lock (timer)
             {
                 timer.Stop();
                 timer.Dispose();
-            }           
+            }
             return ValueTask.CompletedTask;
         }
     }

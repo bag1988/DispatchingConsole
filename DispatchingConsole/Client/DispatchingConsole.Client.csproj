@@ -23,18 +23,10 @@
 		<PackageReference Include="SensorM.GsoUi.BlazorLibrary" />
 		<PackageReference Include="SensorM.GsoCore.SharedLibrary" />
 		<PackageReference Include="SensorM.GsoCore.ReplaceLibrary" />
-		<PackageReference Include="SensorM.GsoApi.LibraryProto" />
 	</ItemGroup>
 
 	<ItemGroup>
 		<ServiceWorker Include="wwwroot\service-worker.js" PublishedContent="wwwroot\service-worker.published.js" />
-	</ItemGroup>
-
-	<ItemGroup>
-	  <Content Update="wwwroot\signalr.js">
-	    <ExcludeFromSingleFile>true</ExcludeFromSingleFile>
-	    <CopyToPublishDirectory>PreserveNewest</CopyToPublishDirectory>
-	  </Content>
 	</ItemGroup>
 
 </Project>

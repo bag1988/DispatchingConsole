@@ -2,13 +2,12 @@
 
 <ModalDialog Title="@AsoRep[Abon != null? "IDS_REG_AB_SAVE" : "IDS_REG_AB_INSERT"]" ButtonCloseEvent="()=>CallbackEvent.InvokeAsync(true)">
     <BodyContent>
-
-        @if (Model.Dep != null)
-        {
-            <form id="createabonent" @onsubmit="SetAbInfo">
+        <BlazorLibrary.Shared.FormComponent.FormDefault OnSumbit="SetAbInfo">
+            @if (Model.Dep != null)
+            {
                 <div class="mb-3">
                     <label class="form-label">@AsoRep["IDS_ABONENT"]</label>
-                    <InputFocus @bind-Value="Model.AbName" />
+                    <InputFocus @bind-Value="Model.AbName" maxlength="255" required />
                 </div>
                 <div class="mb-3">
                     <label class="form-label">@AsoRep["IDS_DEPCOMMENT"]</label>
@@ -21,7 +20,6 @@
                         {
                             <option value="@item.Dep.ObjID">@item.Name</option>
                         }
-
                     </select>
                 </div>
                 <div class="mb-3">
@@ -46,8 +44,8 @@
                 </div>
                 <div class="mb-3">
                     <label class="form-label">@AsoRep["IDS_STRING_AB_PRIOR"]</label>
-                    <input type="number" min=1 max=99 class="form-control" @bind="Model.AbPrior">
-                </div>                
+                    <input type="number" min=1 max=99 class="form-control" @bind="Model.AbPrior" required>
+                </div>
                 <div class="mb-3">
                     <label class="pointer mt-4" @onclick="()=>AddPassword=!AddPassword"><span class="oi oi-@(AddPassword?"minus":"plus")"></span> @AsoRep["IDS_STRING_CREATE_PASSWORD"]</label>
                 </div>
@@ -65,33 +63,27 @@
                         </div>
                     }
                 }
-            </form>
-            <h5>@AsoRep["IDS_STRING_NOTIFY_SHEDULE"]</h5>
-            @if (Model.Abon != null)
-            {
-                <ViewSchedule Abon="@Model.Abon" SheduleList="SheduleList" />
-            }
-            <BlazorLibrary.Shared.LabelsComponent.Labels @ref="_labels" IdForm="@GetOBJ_Key" />
-        }
-        else
-        {
-            <PLoad />
-        }
 
-    </BodyContent>
-    <ButtonContent>
-        <CheckP BitPosList="@(new[]{NameBitsPos.Create, NameBitsPos.CreateNoStandart})">
-            @if (IsSave)
-            {
-                <p class="alert alert-success">
-                    @AsoRep["IDS_OK_SAVE"]
-                </p>
+                <h5>@AsoRep["IDS_STRING_NOTIFY_SHEDULE"]</h5>
+                @if (Model.Abon != null)
+                {
+                    <ViewSchedule Abon="@Model.Abon" SheduleList="SheduleList" />
+                }
+                <BlazorLibrary.Shared.LabelsComponent.Labels @ref="_labels" IdForm="@GetOBJ_Key" />
             }
-            <BSumbit FormId="createabonent" IsProcessing="IsProcessing" />
-        </CheckP>
-        @if (CallbackEvent.HasDelegate)
-        {
-            <BCancel OnClick="()=>CallbackEvent.InvokeAsync(true)" />
-        }
-    </ButtonContent>
+            else
+            {
+                <PLoad />
+            }
+            <ButtonModal>
+                <CheckP BitPosList="@(new[]{NameBitsPos.Create, NameBitsPos.CreateNoStandart})">
+                    <BSumbit IsProcessing="context" />
+                </CheckP>
+                @if (CallbackEvent.HasDelegate)
+                {
+                    <BCancel OnClick="()=>CallbackEvent.InvokeAsync(true)" />
+                }
+            </ButtonModal>
+        </BlazorLibrary.Shared.FormComponent.FormDefault>
+    </BodyContent>
 </ModalDialog>

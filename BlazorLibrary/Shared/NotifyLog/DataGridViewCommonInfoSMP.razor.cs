@@ -131,7 +131,7 @@ namespace BlazorLibrary.Shared.NotifyLog
 
         void DbClick(CSMP16xGetItemsINotifySess? item)
         {
-            MyNavigationManager.NavigateTo($"/PuNotifyLog/{item?.SubSessID}?systemId={item?.SitID?.SubsystemID}");
+            MyNavigationManager.NavigateTo($"/{item?.SitID?.SubsystemID}/PuNotifyLog/{item?.SubSessID}");
         }
 
         private void SeSelectItem(List<CSMP16xGetItemsINotifySess>? list)

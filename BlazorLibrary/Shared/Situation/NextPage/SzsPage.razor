@@ -1,11 +1,11 @@
 ﻿@using BlazorLibrary.Helpers
 @using SMDataServiceProto.V1;
 @using SharedLibrary.GlobalEnums
-
+@inject ILogger<SzsPage> _logger
 
 <ModalDialog Title="@(ObjectList?.LastOrDefault()?.Name??GsoRep["IDS_STRING_CREATE_SIT_SZS"])" ButtonCloseEvent="Cancel">
     <BodyContent>
-        <form id="createszs" @onsubmit="Next">
+        <BlazorLibrary.Shared.FormComponent.FormDefault OnSumbit="Next">
             @if (IsLoadPage)
             {
                 <PLoad />
@@ -16,7 +16,7 @@
 
                 @*Выбор комманды*@
                 <div class="mb-2">
-                    <select class="form-select form-select-sm" @bind="PrdItem.CmdID">
+                    <select class="form-select form-select-sm" @bind="PrdItem.CmdID" required>
                         @if (m_CmdList != null)
                         {
                             @foreach (var item in m_CmdList)
@@ -29,7 +29,7 @@
 
                 @*Выбор номера комманды*@
                 <div class="mb-2">
-                    <select class="form-select form-select-sm" @bind="PrdItem.CmdParam">
+                    <select class="form-select form-select-sm" @bind="PrdItem.CmdParam" required>
                         <option value="1">@SMP16xRep["COMMAND_1"]</option>
                         <option value="2">@SMP16xRep["COMMAND_2"]</option>
                         <option value="3">@SMP16xRep["COMMAND_3"]</option>
@@ -222,46 +222,44 @@
             {
                 <PNoData />
             }
-        </form>
-    </BodyContent>
-    <ButtonContent>
-        <div class="d-flex align-items-center">
-            <label class="form-check-label me-2">
-                <input class="form-check-input" type="checkbox" checked="@IsAllMsg" @onchange="@((e)=>SetAllView(e))"> @Rep["AllMessage"]
-            </label>
-            @if (IsReadOnly == false)
-            {
-                <BDark OnClick="@(()=>{ViewInfoMessage=true; IsNewMessage=true;})" Text="@GsoRep["ID_RECORD"]" />                
-            }
-            @if (IsViewMessage)
-            {
-                <BDark OnClick="@(()=>{ViewInfoMessage=true; IsNewMessage=false;})" Text="@AsoRep["ReadMessage"]" />
-            }
-            <div class="ms-auto">
-                <CheckP BitPosList="@(new[]{NameBitsPos.Create, NameBitsPos.CreateNoStandart})">
-                    @if (IsReadOnly == false)
-                    {
-                        @if (IsCreatePrd)
+            <ButtonModal>
+                <label class="form-check-label me-2">
+                    <input class="form-check-input" type="checkbox" checked="@IsAllMsg" @onchange="@((e)=>SetAllView(e))"> @Rep["AllMessage"]
+                </label>
+                @if (IsReadOnly == false)
+                {
+                    <BDark OnClick="@(()=>{ViewInfoMessage=true; IsNewMessage=true;})" Text="@GsoRep["ID_RECORD"]" />
+                }
+                @if (IsViewMessage)
+                {
+                    <BDark OnClick="@(()=>{ViewInfoMessage=true; IsNewMessage=false;})" Text="@AsoRep["ReadMessage"]" />
+                }
+                <div class="ms-auto">
+                    <CheckP BitPosList="@(new[]{NameBitsPos.Create, NameBitsPos.CreateNoStandart})">
+                        @if (IsReadOnly == false)
                         {
-                            <BDark OnClick="SavePrd" Text="@(SzsList==null?GsoRep["IDS_STRING_SAVE"]:GsoRep["IDS_STRING_NEXT"])" />
-                        }
-                        else
-                        {
-                            @if (IsIndividualMode == true)
+                            @if (IsCreatePrd)
                             {
-                                <BSumbit FormId="createszs" IsProcessing="IsProcessing" Text="@GsoRep["IDS_STRING_NEXT"]" />
+                                <BSumbit SetFocus="true" IsProcessing="context" Text="@(SzsList==null?GsoRep["IDS_STRING_SAVE"]:GsoRep["IDS_STRING_NEXT"])" />
                             }
                             else
                             {
-                                <BSumbit FormId="createszs" IsProcessing="IsProcessing" />
+                                @if (IsIndividualMode == true)
+                                {
+                                    <BSumbit SetFocus="true" IsProcessing="context" Text="@GsoRep["IDS_STRING_NEXT"]" />
+                                }
+                                else
+                                {
+                                    <BSumbit SetFocus="true" IsProcessing="context" />
+                                }
                             }
                         }
-                    }
-                </CheckP>
-                <BSecondary IsOutline="true" OnClick="Cancel" Text="@GsoRep["IDS_STRING_BACK"]" />
-            </div>
-        </div>
-    </ButtonContent>
+                    </CheckP>
+                    <BSecondary HotKey="@KeyCode.Escape" IsOutline="true" OnClick="Cancel" Text="@GsoRep["IDS_STRING_BACK"]" />
+                </div>
+            </ButtonModal>
+        </BlazorLibrary.Shared.FormComponent.FormDefault>
+    </BodyContent>
 </ModalDialog>
 
 <CheckP BitPosList="@(new[]{NameBitsPos.Create, NameBitsPos.CreateNoStandart})">

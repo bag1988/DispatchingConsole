@@ -4,19 +4,18 @@
 @using DispatchingConsole.Client.WebRTC;
 @inject ILogger<MessagesForChat> _logger
 
-<div style="display: flex;flex-direction: column-reverse;">
+<div>
     @if (Messages != null)
     {
         @if (Messages.Any())
         {
-            var zIndex = Messages.GroupBy(x => x.Date.Date).Count();
             @foreach (var group in Messages.GroupBy(x => x.Date.Date))
             {
-
+                <p class="text-center position-sticky my-2 top-0 bg-dark text-white" style="z-index:3">@group.Key.Date.ToLocalTime().ToString("D")</p>
                 @foreach (var item in group)
                 {
-                    var isThisUser = (IpAddressUtilities.CompareForAuthority(item.AuthorityUrl, MyNavigationManager.BaseUri) && item.UserName == UserName);
-                    var isNext = NextUserEqual(item);
+                    var isThisUser = (_webRtc.IsMyAuthorityUrl(item.AuthorityUrl) && item.UserName == UserName);
+                    var isNext = PrevUserEqual(item);
 
                     <div class="w-100 @(isNext?"pt-1":"pt-2") px-2 d-flex message-container">
                         <div class="@(isThisUser? "ms-auto":"")" style="max-width:85%; width:auto;">
@@ -43,7 +42,7 @@
                                     }
                                     else if (_webRtc._imgExt.Contains(Path.GetExtension(item.Url).ToLower()))
                                     {
-                                        <img title="@item.Message" alt="@item.Message" src="@($"api/v1/chat/GetFileServer?fileName={item.Url}")" style="max-width:500px; max-height:500px;" />
+                                        <img title="@item.Message" alt="@item.Message" src="@($"api/v1/chat/GetFileServer?fileName={item.Url}")" style="max-width:500px; max-height:500px; width:100%;" />
                                     }
                                     else
                                     {
@@ -59,8 +58,6 @@
                         </div>
                     </div>
                 }
-                <p class="text-center position-sticky my-2 top-0 bg-dark text-white" style="z-index:@(zIndex)">@group.Key.Date.ToLocalTime().ToString("D")</p>
-                zIndex--;
             }
         }
         else

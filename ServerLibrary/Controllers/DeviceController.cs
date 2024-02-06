@@ -137,7 +137,7 @@ namespace ServerLibrary.Controllers
             {
                 response = await _SMP16x.EditCommandAsync(s);
 
-                await _Log.Write(Source: (int)GSOModules.P16Forms_Module, EventCode: 103/*IDS_REG_BINDING_UPDATE*/, SubsystemID: _userInfo.GetInfo?.SubSystemID, UserID: _userInfo.GetInfo?.UserID);
+                await _Log.Write(Source: (int)GSOModules.P16Forms_Module, EventCode: 103/*IDS_REG_BINDING_UPDATE*/, SubsystemID: SubsystemType.SUBSYST_P16x, UserID: _userInfo.GetInfo?.UserID);
             }
             catch (Exception ex)
             {
@@ -389,7 +389,7 @@ namespace ServerLibrary.Controllers
             {
                 response = await _UUZSData.DeleteDeviceAsync(request);
 
-                await _Log.Write(Source: (int)GSOModules.SzsForms_Module, EventCode: 3/*IDS_REG_DEV_DELETE*/, SubsystemID: _userInfo.GetInfo?.SubSystemID, UserID: _userInfo.GetInfo?.UserID);
+                await _Log.Write(Source: (int)GSOModules.SzsForms_Module, EventCode: 3/*IDS_REG_DEV_DELETE*/, SubsystemID: request.SubsystemID, UserID: _userInfo.GetInfo?.UserID);
             }
             catch (Exception ex)
             {
@@ -577,7 +577,7 @@ namespace ServerLibrary.Controllers
                 if (request.FirstOrDefault()?.DeviceID != 0)
                     EventCode = (int)GsoEnum.IDS_REG_DEV_UPDATE;
 
-                await _Log.Write(Source: (int)GSOModules.GsoForms_Module, EventCode: EventCode, SubsystemID: _userInfo.GetInfo?.SubSystemID, UserID: _userInfo.GetInfo?.UserID);
+                await _Log.Write(Source: (int)GSOModules.GsoForms_Module, EventCode: EventCode, SubsystemID: SubsystemType.SUBSYST_SZS, UserID: _userInfo.GetInfo?.UserID);
             }
             catch (Exception ex)
             {

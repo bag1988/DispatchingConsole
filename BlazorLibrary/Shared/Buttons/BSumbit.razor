@@ -1,5 +1,5 @@
 ﻿@inherits ButtonDefault
-<button form="@FormId" disabled="@(IsProcessing?"disabled":null)" type="submit" hotkey="@(!string.IsNullOrEmpty(HotKey)?HotKey:null)" class="btn btn@(IsOutline==true?"-outline":"")-@ColorButton @(TextWrap==true?"text-wrap":"text-nowrap") @AddClass">@_content</button>
+<button @ref="button" form="@FormId" disabled="@(IsProcessing?"disabled":null)" type="submit" class="btn btn@(IsOutline==true?"-outline":"")-@ColorButton @(TextWrap==true?"text-wrap":"text-nowrap") @AddClass">@_content</button>
 
 @code {
     [Parameter]
@@ -8,8 +8,19 @@
     [Parameter]
     public string? ColorButton { get; set; } = "dark";
 
-    protected override void OnInitialized()
+    [Parameter]
+    public bool SetFocus { get; set; } = false;
+
+    ElementReference button;
+
+    protected override async Task OnInitializedAsync()
     {
         Text = Text ?? GsoRep["IDS_STRING_SAVE"];
+
+        if (SetFocus)
+        {
+            await Task.Yield();
+            await button.FocusAsync();
+        }
     }
 }

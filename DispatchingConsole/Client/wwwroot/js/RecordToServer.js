@@ -35,7 +35,7 @@
     this.recorder.stop();
     return new Promise(() => {      
       this.recorder.onstop = async () => {
-        await this.dotNet.invokeMethodAsync("StopStreamToFile");       
+        await this.dotNet.invokeMethodAsync("StopStreamToFile", this.fileName);       
       };
     });
   }

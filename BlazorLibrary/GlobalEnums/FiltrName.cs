@@ -53,8 +53,10 @@ namespace BlazorLibrary.GlobalEnums
         public const string FiltrStaff = "FILTRSTAFF";
         public const string FiltrSitObjects = "FILTRSITOBJECTS";
         public const string FiltrAutoNotify = "FILTRAUTONOTIFY";
+        public const string FiltrAutoTask = "FILTRAUTOTASK";
         public const string FiltrSitStart = "FILTRSITSTART";
         public const string FiltrWhiteIp = "FILTRWHITEIP";
+        public const string FiltrWhiteIpNotify = "FILTRWHITEIPNOTIFY";
         public const string FiltrBackUp = "FILTRBACKUP";
         #endregion
 

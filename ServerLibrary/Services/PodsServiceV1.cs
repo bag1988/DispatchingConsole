@@ -13,6 +13,7 @@ using LibraryProto.Helpers.V1;
 using FiltersGSOProto.V1;
 using Microsoft.Extensions.Hosting;
 using System.Reflection.Metadata;
+using System.Collections.Generic;
 
 
 namespace SensorM.GsoCommon.ServerLibrary.Services
@@ -22,6 +23,9 @@ namespace SensorM.GsoCommon.ServerLibrary.Services
         private readonly ILogger<PodsServiceV1> _logger;
         private readonly PodsContext _DbContext;
         readonly string DirectoryTmp;
+
+        public static ContactInfo? SetUpdateActiveForContact = null;
+
         public PodsServiceV1(ILogger<PodsServiceV1> logger, IConfiguration conf, PodsContext dbContext)
         {
             _logger = logger;
@@ -36,7 +40,7 @@ namespace SensorM.GsoCommon.ServerLibrary.Services
             {
                 if (!string.IsNullOrEmpty(authorityUrl) && !string.IsNullOrEmpty(userName))
                 {
-                    if (!_DbContext.Users.Any(x => x.AuthorityUrl == authorityUrl && x.UserName == userName))
+                    if (!_DbContext.Users.Any(x => x.UserName == userName))
                     {
                         _logger.LogTrace(@"Добавление пользователя {Url}:{UserName}", authorityUrl, userName);
                         var user = new UserIdentity()
@@ -47,7 +51,15 @@ namespace SensorM.GsoCommon.ServerLibrary.Services
                         _DbContext.Users.Add(user);
                         _DbContext.SaveChanges();
                     }
-                    return _DbContext.Users.First(x => x.AuthorityUrl == authorityUrl && x.UserName == userName).Id;
+
+                    UpdateLastActiveLocalContact(new ContactInfo()
+                    {
+                        AuthorityUrl = authorityUrl,
+                        UserName = userName,
+                        LastActive = DateTime.UtcNow.ToTimestamp()
+                    }).Wait();
+
+                    return _DbContext.Users.First(x => x.UserName == userName).Id;
                 }
             }
             catch (Exception ex)
@@ -165,7 +177,7 @@ namespace SensorM.GsoCommon.ServerLibrary.Services
                                     var r = _DbContext.Messages.AsNoTracking().Where(filtrExp.Compile()).OrderByDescending(x => x.Date);
                                     if (r?.Any() ?? false)
                                     {
-                                        response.List.AddRange(r.Skip(request.Skip).Take(request.Take));
+                                        response.List.AddRange(r.Skip(request.Skip).Take(request.Take).Reverse());
                                         response.AllCount = r.Count();
                                     }
                                 }
@@ -365,9 +377,9 @@ namespace SensorM.GsoCommon.ServerLibrary.Services
             {
                 if (request.List?.Count > 0)
                 {
-                    var newData = request.List.ExceptBy(_DbContext.SharedContact.Select(x => $"{x.AuthorityUrl}&{x.UserName}"), x => $"{x.AuthorityUrl}&{x.UserName}").ToList();
+                    var newData = request.List.ExceptBy(_DbContext.SharedContact.AsEnumerable().Where(x => x.Type == TypeContact.Local).Select(x => x.UserName), x => x.UserName).ToList();
 
-                    var deleteData = _DbContext.SharedContact.AsNoTracking().AsEnumerable().Where(x => x.Type == TypeContact.Local).ExceptBy(request.List.Select(x => $"{x.AuthorityUrl}&{x.UserName}"), x => $"{x.AuthorityUrl}&{x.UserName}");
+                    var deleteData = _DbContext.SharedContact.AsEnumerable().Where(x => x.Type == TypeContact.Local).ExceptBy(request.List.Select(x => x.UserName), x => x.UserName);
 
                     if (newData?.Count > 0)
                     {
@@ -376,12 +388,11 @@ namespace SensorM.GsoCommon.ServerLibrary.Services
                         await CreateDefaultChats(newData);
                         response.Value = true;
                     }
-
                     if (deleteData?.Any() ?? false)
                     {
                         foreach (var item in deleteData)
                         {
-                            var user = _DbContext.Users.FirstOrDefault(x => x.AuthorityUrl == item.AuthorityUrl && x.UserName == item.UserName);
+                            var user = _DbContext.Users.FirstOrDefault(x => x.UserName == item.UserName);
 
                             if (user != null)
                             {
@@ -392,9 +403,37 @@ namespace SensorM.GsoCommon.ServerLibrary.Services
                                     RemoveFilesForChat(item.UserName, chat.Key, chat.NameRoom);
                                     _DbContext.Chats.Remove(chat);
                                 }
+                                var deleteContactItems = _DbContext.Connects.Where(x => x.AuthorityUrl == user.AuthorityUrl && x.UserName == user.UserName);
+                                if (deleteContactItems?.Any() ?? false)
+                                {
+                                    _DbContext.Connects.RemoveRange(deleteContactItems);
+                                }
                             }
                         }
                         _DbContext.SharedContact.RemoveRange(deleteData);
+                        await _DbContext.SaveChangesAsync();
+                        response.Value = true;
+                    }
+
+                    var updateData = _DbContext.SharedContact.AsEnumerable().Where(x => x.Type == TypeContact.Local).ExceptBy(request.List.Select(x => $"{x.NameCu}{x.AuthorityUrl}&{x.UserName}"), x => $"{x.NameCu}{x.AuthorityUrl}&{x.UserName}");
+
+                    if (updateData?.Any() ?? false)
+                    {
+                        foreach (var item in updateData)
+                        {
+                            var first = request.List.FirstOrDefault(x => x.UserName == item.UserName);
+                            if (first != null)
+                            {
+                                if (item.NameCu != first.NameCu)
+                                {
+                                    item.NameCu = first.NameCu;
+                                }
+                                if (item.AuthorityUrl != first.AuthorityUrl)
+                                {
+                                    _DbContext.Connects.Where(x => x.AuthorityUrl == item.AuthorityUrl && x.UserName == item.UserName).ExecuteUpdate(x => x.SetProperty(p => p.AuthorityUrl, first.AuthorityUrl));
+                                }
+                            }
+                        }
                         await _DbContext.SaveChangesAsync();
                         response.Value = true;
                     }
@@ -414,9 +453,10 @@ namespace SensorM.GsoCommon.ServerLibrary.Services
             {
                 var newData = request.List.ExceptBy(_DbContext.SharedContact.Select(x => $"{x.AuthorityUrl}&{x.UserName}"), x => $"{x.AuthorityUrl}&{x.UserName}");
 
-                var updateData = _DbContext.SharedContact.IntersectBy(request.List.Select(x => $"{x.AuthorityUrl}&{x.UserName}"), x => $"{x.AuthorityUrl}&{x.UserName}");
+                var updateData = _DbContext.SharedContact.AsEnumerable().IntersectBy(request.List.Select(x => $"{x.AuthorityUrl}&{x.UserName}"), x => $"{x.AuthorityUrl}&{x.UserName}");
 
-                var deleteData = _DbContext.SharedContact.AsNoTracking().AsEnumerable().Where(x => x.Type == TypeContact.Remote && request.List.Any(l => l.AuthorityUrl == x.AuthorityUrl)).ExceptBy(request.List.Select(x => $"{x.AuthorityUrl}&{x.UserName}"), x => $"{x.AuthorityUrl}&{x.UserName}");
+                var firstUrl = request.List.FirstOrDefault()?.AuthorityUrl;
+                var deleteData = _DbContext.SharedContact.AsEnumerable().Where(x => x.Type == TypeContact.Remote && x.AuthorityUrl == firstUrl).ExceptBy(request.List.Select(x => $"{x.AuthorityUrl}&{x.UserName}"), x => $"{x.AuthorityUrl}&{x.UserName}");
 
                 if (newData?.Any() ?? false)
                 {
@@ -429,7 +469,11 @@ namespace SensorM.GsoCommon.ServerLibrary.Services
                 {
                     foreach (var item in updateData)
                     {
-                        item.LastActive = request.List.FirstOrDefault(x => x.AuthorityUrl == item.AuthorityUrl && x.UserName == item.UserName)?.LastActive;
+                        var lastActive = request.List.FirstOrDefault(x => x.AuthorityUrl == item.AuthorityUrl && x.UserName == item.UserName)?.LastActive;
+                        if (lastActive != null)
+                        {
+                            item.LastActive = lastActive;
+                        }
                     }
                     await _DbContext.SaveChangesAsync();
                     response.Value = true;
@@ -438,10 +482,50 @@ namespace SensorM.GsoCommon.ServerLibrary.Services
                 if (deleteData?.Any() ?? false)
                 {
                     _DbContext.SharedContact.RemoveRange(deleteData);
+
+                    foreach (var user in deleteData)
+                    {
+                        var deleteContactItems = _DbContext.Connects.Where(x => x.AuthorityUrl == user.AuthorityUrl && x.UserName == user.UserName);
+                        if (deleteContactItems?.Any() ?? false)
+                        {
+                            _DbContext.Connects.RemoveRange(deleteContactItems);
+                        }
+                    }
+
                     await _DbContext.SaveChangesAsync();
                     response.Value = true;
                 }
 
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex.Message);
+            }
+            return response;
+        }
+
+        public override async Task<BoolValue> SetCurrentRemoteContactForIp(CurrentRemoteCuArray request, ServerCallContext context)
+        {
+            BoolValue response = new() { Value = false };
+            try
+            {
+                var deleteData = _DbContext.SharedContact.AsEnumerable().Where(x => x.Type == TypeContact.Remote).ExceptBy(request.List, x => x.AuthorityUrl);
+                                
+                if (deleteData?.Any() ?? false)
+                {
+                    _DbContext.SharedContact.RemoveRange(deleteData);
+
+                    foreach (var user in deleteData)
+                    {
+                        var deleteContactItems = _DbContext.Connects.Where(x => x.AuthorityUrl == user.AuthorityUrl && x.UserName == user.UserName);
+                        if (deleteContactItems?.Any() ?? false)
+                        {
+                            _DbContext.Connects.RemoveRange(deleteContactItems);
+                        }
+                    }
+                    await _DbContext.SaveChangesAsync();
+                    response.Value = true;
+                }
             }
             catch (Exception ex)
             {
@@ -487,7 +571,7 @@ namespace SensorM.GsoCommon.ServerLibrary.Services
 
                 if (idUser > 0)
                 {
-                    response.List.AddRange(_DbContext.ContactForUser.OrderBy(x => x.UserName).Where(x => x.UserIdentityId == idUser).Select(x => new ContactInfo()
+                    response.List.AddRange(_DbContext.ContactForUser.OrderBy(x => x.AuthorityUrl).ThenBy(x => x.UserName).Where(x => x.UserIdentityId == idUser).Select(x => new ContactInfo()
                     {
                         AuthorityUrl = x.AuthorityUrl,
                         LastActive = x.LastActive,
@@ -497,7 +581,7 @@ namespace SensorM.GsoCommon.ServerLibrary.Services
                         Type = TypeContact.Manual
                     }));
 
-                    response.List.AddRange(_DbContext.SharedContact.OrderBy(x => x.UserName));
+                    response.List.AddRange(_DbContext.SharedContact.OrderBy(x => x.Type).ThenBy(x => x.AuthorityUrl).ThenBy(x => x.UserName));
                 }
 
 
@@ -515,6 +599,23 @@ namespace SensorM.GsoCommon.ServerLibrary.Services
             try
             {
                 response.List.AddRange(_DbContext.SharedContact.OrderBy(x => x.UserName).Where(x => x.Type == TypeContact.Local));
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex.Message);
+            }
+            return Task.FromResult(response);
+        }
+
+        public override Task<ContactInfoList> GetRemoteContactForUrl(StringValue request, ServerCallContext context)
+        {
+            ContactInfoList response = new();
+            try
+            {
+                if (!string.IsNullOrEmpty(request.Value))
+                {
+                    response.List.AddRange(_DbContext.SharedContact.OrderBy(x => x.UserName).Where(x => x.AuthorityUrl == request.Value && x.Type == TypeContact.Remote));
+                }
             }
             catch (Exception ex)
             {
@@ -546,24 +647,7 @@ namespace SensorM.GsoCommon.ServerLibrary.Services
             BoolValue response = new() { Value = false };
             try
             {
-                var sharedContact = _DbContext.SharedContact.FirstOrDefault(x => x.AuthorityUrl == request.AuthorityUrl && x.UserName == request.UserName);
-                if (sharedContact != null)
-                {
-                    sharedContact.LastActive = request.LastActive;
-                    _DbContext.SharedContact.Update(sharedContact);
-                    await _DbContext.SaveChangesAsync();
-                    response.Value = true;
-                }
-                else
-                {
-                    var manualContact = _DbContext.ContactForUser.Where(x => x.AuthorityUrl == request.AuthorityUrl && x.UserName == request.UserName);
-                    if (manualContact != null)
-                    {
-                        manualContact.ExecuteUpdate(x => x.SetProperty(p => p.LastActive, request.LastActive));
-                        await _DbContext.SaveChangesAsync();
-                        response.Value = true;
-                    }
-                }
+                response = await UpdateLastActiveLocalContact(request);
             }
             catch (Exception ex)
             {
@@ -571,6 +655,47 @@ namespace SensorM.GsoCommon.ServerLibrary.Services
             }
             return response;
         }
+
+        async Task<BoolValue> UpdateLastActiveLocalContact(ContactInfo request)
+        {
+            BoolValue response = new() { Value = false };
+            try
+            {
+                if (SetUpdateActiveForContact != null && SetUpdateActiveForContact.AuthorityUrl == request.AuthorityUrl && SetUpdateActiveForContact.UserName == request.UserName)
+                {
+                    response.Value = true;
+                }
+                else
+                {
+                    SetUpdateActiveForContact = new(request);
+                    var sharedContact = _DbContext.SharedContact.FirstOrDefault(x => x.AuthorityUrl == request.AuthorityUrl && x.UserName == request.UserName);
+                    if (sharedContact != null)
+                    {
+                        sharedContact.LastActive = request.LastActive;
+                        _DbContext.SharedContact.Update(sharedContact);
+                        await _DbContext.SaveChangesAsync();
+                        response.Value = true;
+                    }
+                    else
+                    {
+                        var manualContact = _DbContext.ContactForUser.Where(x => x.AuthorityUrl == request.AuthorityUrl && x.UserName == request.UserName);
+                        if (manualContact != null)
+                        {
+                            manualContact.ExecuteUpdate(x => x.SetProperty(p => p.LastActive, request.LastActive));
+                            await _DbContext.SaveChangesAsync();
+                            response.Value = true;
+                        }
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex.Message);
+            }
+            SetUpdateActiveForContact = null;
+            return response;
+        }
+
 
         public override async Task<BoolValue> DeleteContactForUser(DeleteContactKey request, ServerCallContext context)
         {
@@ -585,6 +710,12 @@ namespace SensorM.GsoCommon.ServerLibrary.Services
                     if (user != null)
                     {
                         _DbContext.ContactForUser.Remove(user);
+
+                        var deleteContactItems = _DbContext.Connects.Where(x => x.AuthorityUrl == user.AuthorityUrl && x.UserName == user.UserName);
+                        if (deleteContactItems?.Any() ?? false)
+                        {
+                            _DbContext.Connects.RemoveRange(deleteContactItems);
+                        }
                         await _DbContext.SaveChangesAsync();
                         response.Value = true;
                     }

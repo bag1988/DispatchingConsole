@@ -53,12 +53,12 @@ namespace BlazorLibrary.Shared.ObjectTree
         public async Task KeySet(KeyboardEventArgs e)
         {
             _shouldPreventDefault = false;
-            if (e.Code == "Enter")
+            if (e.Key == "Enter")
             {
                 await DbCallback();
                 return;
             }
-            else if (e.Code == "ArrowUp" || e.Code == "ArrowDown")
+            else if (e.Key == "ArrowUp" || e.Key == "ArrowDown")
             {
                 if (Items == null)
                     return;
@@ -70,7 +70,7 @@ namespace BlazorLibrary.Shared.ObjectTree
                     _ = JSRuntime?.InvokeVoidAsync("ScrollToSelectElement", Elem, ".bg-select");
                 }
             }
-            else if (e.Code == "ArrowLeft" || e.Code == "ArrowRight")
+            else if (e.Key == "ArrowLeft" || e.Key == "ArrowRight")
             {
                 _shouldPreventDefault = false;
                 if (ElemTree != null)

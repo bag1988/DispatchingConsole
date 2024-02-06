@@ -6,21 +6,21 @@
     <div class="row mb-2">
         <label class="form-label col-md-4">@GsoRep["IDS_STRING_TIMEOUT_BETWEEN_CALL_BUSY"]</label>
         <div class="col-md-8">
-            <input type="number" class="form-control" @bind="SubParam.TimeoutAbBu">
+            <input type="number" max="9999" class="form-control" @bind="SubParam.TimeoutAbBu" required>
         </div>
     </div>
     @*Таймаут между дозвонами при "нет ответа" для Vip абонентов (с):*@
     <div class="row mb-2">
         <label class="form-label col-md-4">@AsoRep["TimoutNoAnswerVip"]</label>
         <div class="col-md-8">
-            <input type="number" class="form-control" @bind="SubParam.VipTioutNo">
+            <input type="number" max="99999999" class="form-control" @bind="SubParam.VipTioutNo" required>
         </div>
     </div>
     @*Таймаут между дозвонами при ответе "занято" для Vip абонентов (с):*@
     <div class="row">
         <label class="form-label col-md-4">@AsoRep["TimoutBusyVip"]</label>
         <div class="col-md-8">
-            <input type="number" class="form-control" @bind="SubParam.VipTioutBu">
+            <input type="number" max="99999999" class="form-control" @bind="SubParam.VipTioutBu" required>
         </div>
     </div>
 }

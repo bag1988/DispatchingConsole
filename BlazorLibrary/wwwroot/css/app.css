@@ -219,12 +219,12 @@ a, .btn-link {
 .audio-player {
     --bgcolor: #e2e3e5;
     height: 30px;
-    width: 100%;
+   /* width: 100%;*/
 }
 
     .audio-player audio {
         height: inherit;
-        width: inherit;
+        /*width: inherit;*/
     }
 
         .audio-player audio::-webkit-media-controls-panel {
@@ -609,10 +609,8 @@ article {
         top: 0;
     }
 
-    .top-row {
-        position: sticky;
-        top: 0;
-        z-index: 1;
+    .top-row {        
+        
     }
 
         .top-row.auth a:first-child {

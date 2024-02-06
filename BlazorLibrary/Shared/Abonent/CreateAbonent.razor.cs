@@ -23,8 +23,6 @@ namespace BlazorLibrary.Shared.Abonent
         private List<Shedule>? SheduleList = null;
         private List<Shedule>? OldSheduleList = null;
 
-        private bool IsSave = false;
-
         private AbonInfo Model = new();
 
         private List<Department> DepartmentList = new();
@@ -34,8 +32,6 @@ namespace BlazorLibrary.Shared.Abonent
         private string Password = "";
 
         private bool AddPassword = false;
-
-        bool IsProcessing = false;
 
         private string TitleError = "";
 
@@ -47,7 +43,6 @@ namespace BlazorLibrary.Shared.Abonent
         {
             LocalStaff = await _User.GetLocalStaff();
             TitleError = AsoRep[Abon != 0 ? "IDS_REG_AB_SAVE" : "IDS_REG_AB_INSERT"];
-            IsSave = false;
             await GetAbInfo();
             await GetDepartmentList();
             await GetAbStatusList();
@@ -88,7 +83,6 @@ namespace BlazorLibrary.Shared.Abonent
         {
             if (Model != null)
             {
-                IsProcessing = true;
                 if (string.IsNullOrEmpty(Model.AbName))
                 {
                     MessageView?.AddError(TitleError, AsoRep["IDS_NOABNAME"]);
@@ -127,12 +121,7 @@ namespace BlazorLibrary.Shared.Abonent
                         if (id != null && id.ID != 0)
                         {
                             await SaveShulde(id.ID);
-                            await SaveSpecifications(id.ID);
-                            IsSave = true;
-                            _ = Task.Delay(2000).ContinueWith(x =>
-                            {
-                                IsSave = false; StateHasChanged();
-                            });
+                            await SaveSpecifications(id.ID);                            
                             if (CallbackEvent.HasDelegate)
                                 await CallbackEvent.InvokeAsync(true);
                         }
@@ -151,7 +140,6 @@ namespace BlazorLibrary.Shared.Abonent
                     MessageView?.AddError(TitleError, AsoRep["IDS_E_NOSHEDULE"]);
                 }
             }
-            IsProcessing = false;
         }
 
         private async Task SaveShulde(int abonId)

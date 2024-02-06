@@ -90,29 +90,29 @@ public class GetUserInfo
         return CanStartStopNotify;
     }
 
-    public async Task<int> GetSubSystemID()
-    {
-        int id = 0;
-        try
-        {
-            int.TryParse(_http.DefaultRequestHeaders.GetHeader(CookieName.SubsystemID), out id);
-            if (id == 0)
-            {
-                id = await _localStorage.GetSubSystemIdAsync() ?? SubsystemType.SUBSYST_ASO;
-                _http.DefaultRequestHeaders.AddHeader(CookieName.SubsystemID, id.ToString());
-            }
-        }
-        catch (Exception ex)
-        {
-            Console.WriteLine(ex.Message);
-        }        
-        return id;
-    }
+    //public async Task<int> GetSubSystemID()
+    //{
+    //    int id = 0;
+    //    try
+    //    {
+    //        int.TryParse(_http.DefaultRequestHeaders.GetHeader(CookieName.SubsystemID), out id);
+    //        if (id == 0)
+    //        {
+    //            id = await _localStorage.GetSubSystemIdAsync() ?? SubsystemType.SUBSYST_ASO;
+    //            _http.DefaultRequestHeaders.AddHeader(CookieName.SubsystemID, id.ToString());
+    //        }
+    //    }
+    //    catch (Exception ex)
+    //    {
+    //        Console.WriteLine(ex.Message);
+    //    }        
+    //    return id;
+    //}
 
-    public async Task<bool> SetSubsystemId(int subSystemId)
-    {
-        _http.DefaultRequestHeaders.AddHeader(CookieName.SubsystemID, subSystemId.ToString());
-        await _localStorage.SetSubSystemIdAsync(subSystemId);
-        return true;
-    }
+    //public async Task<bool> SetSubsystemId(int subSystemId)
+    //{
+    //    _http.DefaultRequestHeaders.AddHeader(CookieName.SubsystemID, subSystemId.ToString());
+    //    //await _localStorage.SetSubSystemIdAsync(subSystemId);
+    //    return true;
+    //}
 }

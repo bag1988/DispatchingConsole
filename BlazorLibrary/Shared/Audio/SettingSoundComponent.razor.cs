@@ -93,7 +93,8 @@ namespace BlazorLibrary.Shared.Audio
             }
             _ = Task.Delay(2000).ContinueWith(x =>
             {
-                IsSave = false; StateHasChanged();
+                IsSave = false;
+                StateHasChanged();
             });
         }
     }

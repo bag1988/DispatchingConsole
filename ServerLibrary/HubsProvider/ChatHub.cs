@@ -1,27 +1,21 @@
-﻿using System;
-using System.Net;
-using System.Net.Http;
-using System.Net.Http.Headers;
+﻿using System.Net;
 using System.Net.Http.Json;
+using System.Reflection;
 using System.Text;
 using System.Text.Json;
 using System.Text.RegularExpressions;
-using System.Threading;
 using System.Threading.Channels;
-using System.Xml.Linq;
 using Dapr.Client;
-using Google.Protobuf;
 using Google.Protobuf.WellKnownTypes;
-using Grpc.Net.Client.Configuration;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.SignalR;
-using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Localization;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Primitives;
 using PodsProto.V1;
 using ReplaceLibrary;
+using SensorM.GsoCommon.ServerLibrary;
 using ServerLibrary.Extensions;
 using SharedLibrary;
 using SharedLibrary.Extensions;
@@ -29,7 +23,6 @@ using SharedLibrary.GlobalEnums;
 using SharedLibrary.Models;
 using SharedLibrary.Utilities;
 using SMDataServiceProto.V1;
-using static Google.Rpc.Context.AttributeContext.Types;
 using static SMSSGsoProto.V1.SMSSGso;
 using static StaffDataProto.V1.StaffData;
 using ChatForUser = SharedLibrary.Models.ChatForUser;
@@ -47,13 +40,11 @@ namespace ServerLibrary.HubsProvider
         private readonly ILogger<ChatHub> _logger;
         private readonly DaprClient _daprClient;
         private readonly static ConnectionMapping _connections = new();
-
-        //readonly PodsGroup.PodsGroupClient _podsClient;
+        private readonly static CreateHttpClient _httpClient = new();
         readonly PodsProto.V1.PodsService.PodsServiceClient _pods;
         readonly SMSSGsoClient _SMSGso;
         readonly SMDataServiceProto.V1.SMDataService.SMDataServiceClient _SMData;
         readonly StaffDataClient _StaffData;
-
 
         readonly IStringLocalizer<DispatchingReplace> DispRep;
 
@@ -71,34 +62,15 @@ namespace ServerLibrary.HubsProvider
             {
                 try
                 {
-                    var context = Context?.GetHttpContext();
-                    if (context != null)
-                    {
-                        var userName = context.User.Identity?.Name;
-
-                        if (!string.IsNullOrEmpty(userName))
-                        {
-                            var host = context.Request.Host.Value;
-
-                            if (!string.IsNullOrEmpty(host))
-                            {
-                                return new MyConnectInfo(host, userName);
-                            }
-                        }
-                    }
+                    return _connections.GetMyConnect(Context.ConnectionId);
                 }
                 catch (Exception ex)
                 {
-                    _logger.LogError(ex.Message);
+                    _logger.WriteLogError(ex, nameof(_getMyKeyConnect));
                 }
                 return null;
             }
         }
-
-        /// <summary>
-        /// Активные http клиенты
-        /// </summary>
-        static Dictionary<string, HttpClient> _httpClients { get; } = new();
 
         /// <summary>
         /// Список чатов для пользователя
@@ -194,7 +166,7 @@ namespace ServerLibrary.HubsProvider
             {
                 if (System.IO.File.Exists(FileName))
                     System.IO.File.Delete(FileName);
-                _logger.WriteLogError(ex, $"{nameof(UploadFile)}");
+                _logger.WriteLogError(ex, nameof(UploadFile));
                 return false;
             }
         }
@@ -214,7 +186,7 @@ namespace ServerLibrary.HubsProvider
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex.Message);
+                _logger.WriteLogError(ex, nameof(GetCountNoReadMessages));
             }
             return null;
         }
@@ -240,11 +212,11 @@ namespace ServerLibrary.HubsProvider
                             var exeptList = addData.ExceptBy(curentUserChats.Select(f => f.Key), x => x.Key).ToList();
                             var deletetList = curentUserChats.ExceptBy(addData.Select(f => f.Key), x => x.Key).ToList();
 
-                            AllChats.First(x => x.UserName == _getMyKeyConnect.UserName && IpAddressUtilities.CompareForAuthority(x.AuthorityUrl, _getMyKeyConnect.AuthorityUrl)).Chats.AddRange(exeptList);
+                            AllChats.First(x => x.UserName == _getMyKeyConnect.UserName && IsLocalAuthorityUrl(_getMyKeyConnect.AuthorityUrl, x.AuthorityUrl)).Chats.AddRange(exeptList);
 
                             if (deletetList?.Count > 0)
                             {
-                                AllChats.First(x => x.UserName == _getMyKeyConnect.UserName && IpAddressUtilities.CompareForAuthority(x.AuthorityUrl, _getMyKeyConnect.AuthorityUrl)).Chats.RemoveAll(deletetList.Contains);
+                                AllChats.First(x => x.UserName == _getMyKeyConnect.UserName && IsLocalAuthorityUrl(_getMyKeyConnect.AuthorityUrl, x.AuthorityUrl)).Chats.RemoveAll(deletetList.Contains);
                             }
                         }
                         return addData;
@@ -253,7 +225,7 @@ namespace ServerLibrary.HubsProvider
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex.Message);
+                _logger.WriteLogError(ex, nameof(GetConnectionList));
             }
 
             return null;
@@ -312,9 +284,9 @@ namespace ServerLibrary.HubsProvider
                 if (_getMyKeyConnect == null)
                     throw new ArgumentNullException();
 
-                if (!string.IsNullOrEmpty(_getMyKeyConnect.AuthorityUrl) && !string.IsNullOrEmpty(_getMyKeyConnect.UserName) && !AllChats.Any(x => x.UserName == _getMyKeyConnect.UserName && IpAddressUtilities.CompareForAuthority(x.AuthorityUrl, _getMyKeyConnect.AuthorityUrl)))
+                if (!string.IsNullOrEmpty(_getMyKeyConnect.AuthorityUrl) && !string.IsNullOrEmpty(_getMyKeyConnect.UserName) && !AllChats.Any(x => x.UserName == _getMyKeyConnect.UserName && IsLocalAuthorityUrl(_getMyKeyConnect.AuthorityUrl, x.AuthorityUrl)))
                     AllChats.Add(new(_getMyKeyConnect.AuthorityUrl, _getMyKeyConnect.UserName));
-                return AllChats.First(x => x.UserName == _getMyKeyConnect.UserName && IpAddressUtilities.CompareForAuthority(x.AuthorityUrl, _getMyKeyConnect.AuthorityUrl)).Chats;
+                return AllChats.First(x => x.UserName == _getMyKeyConnect.UserName && IsLocalAuthorityUrl(_getMyKeyConnect.AuthorityUrl, x.AuthorityUrl)).Chats;
             }
         }
 
@@ -416,45 +388,54 @@ namespace ServerLibrary.HubsProvider
             return Enumerable.Empty<SharedLibrary.Models.ContactInfo>();
         }
 
-        public async Task WriteLocalContact()
+        public async Task<string?> GetLocalAuthorityUrl()
         {
             try
             {
-                ContactInfoList request = new();
-                request.List.AddRange(await GetLocalCuInfo());
-                if (request.List?.Count > 0)
+                var ipList = await GetLocalHostUrl();
+                if (!string.IsNullOrEmpty(ipList))
                 {
-                    var b = await _pods.AddLocalContactAsync(request);
-
-                    var addData = request.List.Select(item => new SharedLibrary.Models.ContactInfo(item.NameCu, item.AuthorityUrl, item.UserName, item.StaffId, item.LastActive?.ToDateTime()) { Type = (SharedLibrary.Models.TypeContact)item.Type });
-
-                    await Clients.All.SendCoreAsync("AddOrUpdateContactList", new[] { addData });
+                    return $"{ipList}:{_AppHttpsPort}";
                 }
             }
             catch (Exception ex)
             {
-                _logger.WriteLogError(ex, nameof(WriteLocalContact));
+                _logger.WriteLogError(ex, nameof(GetLocalAuthorityUrl));
             }
+            return null;
+        }
+
+        async Task<string?> GetLocalHostUrl()
+        {
+            try
+            {
+                var ipList = await _SMData.GetServerIPAddressesAsync(new Google.Protobuf.WellKnownTypes.Empty());
+                return ipList?.Array.FirstOrDefault();
+            }
+            catch (Exception ex)
+            {
+                _logger.WriteLogError(ex, nameof(GetLocalHostUrl));
+            }
+            return null;
         }
 
         async Task<IEnumerable<PodsProto.V1.ContactInfo>> GetLocalCuInfo()
         {
             try
             {
-                var staffInfo = (await _StaffData.GetRegInfo1Async(new Null(), cancellationToken: Context.ConnectionAborted))?.Array.FirstOrDefault();
-                var ipList = await _SMData.GetServerIPAddressesAsync(new Google.Protobuf.WellKnownTypes.Empty(), cancellationToken: Context.ConnectionAborted);
-                var response = await _SMSGso.GetGsoUserEx2Async(new Null(), cancellationToken: Context.ConnectionAborted);
+                var staffInfo = (await _StaffData.GetRegInfo1Async(new Null()))?.Array.FirstOrDefault();
+                var ipList = await GetLocalHostUrl();
+                var response = await _SMSGso.GetGsoUserEx2Async(new Null());
                 if (response != null)
                 {
                     var StaffId = staffInfo?.OBJID?.StaffID ?? 0;
-                    var CuName = !string.IsNullOrEmpty(staffInfo?.CuName) ? staffInfo.CuName : !string.IsNullOrEmpty(staffInfo?.UNC) ? staffInfo.UNC : (ipList?.Array.FirstOrDefault() ?? "ошибка определения");
-                    var AuthorityUrl = !string.IsNullOrEmpty(IpAddressUtilities.GetHost(staffInfo?.UNC)) ? IpAddressUtilities.GetHost(staffInfo?.UNC) : ipList?.Array.FirstOrDefault() ?? "0.0.0.0";
+                    var CuName = !string.IsNullOrEmpty(staffInfo?.CuName) ? staffInfo.CuName : !string.IsNullOrEmpty(staffInfo?.UNC) ? staffInfo.UNC : (ipList ?? "ошибка определения");
+                    var AuthorityUrl = !string.IsNullOrEmpty(IpAddressUtilities.GetHost(staffInfo?.UNC)) ? IpAddressUtilities.GetHost(staffInfo?.UNC) : ipList ?? "0.0.0.0";
 
                     var activeUser = GetConnectUsers();
                     if (StaffId > 0)
                     {
                         AuthorityUrl = $"{AuthorityUrl}:{_AppHttpsPort}";
-                        //AuthorityUrl = $"localhost:3222";
                         ContactInfoList request = new();
                         request.List.AddRange(response.Array.Select<SMSSGsoProto.V1.UserInfoEx, PodsProto.V1.ContactInfo>(item => new PodsProto.V1.ContactInfo()
                         {
@@ -476,7 +457,6 @@ namespace ServerLibrary.HubsProvider
             return Enumerable.Empty<PodsProto.V1.ContactInfo>();
         }
 
-
         /// <summary>
         /// Получить пропущенный вызов для текущего подключения по ключу
         /// </summary>
@@ -493,7 +473,7 @@ namespace ServerLibrary.HubsProvider
 
                 MissedCall.Remove(_getMyKeyConnect.UserName);
 
-                if (response?.Items.Any(x => IpAddressUtilities.CompareForAuthority(x.AuthorityUrl, _getMyKeyConnect.AuthorityUrl) && x.UserName == _getMyKeyConnect.UserName) ?? false)
+                if (response?.Items.Any(x => IsLocalAuthorityUrl(_getMyKeyConnect.AuthorityUrl, x.AuthorityUrl) && x.UserName == _getMyKeyConnect.UserName) ?? false)
                 {
                     return response;
                 }
@@ -520,7 +500,7 @@ namespace ServerLibrary.HubsProvider
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex.Message);
+                _logger.WriteLogError(ex, nameof(DeleteChatForKey));
             }
         }
 
@@ -543,7 +523,7 @@ namespace ServerLibrary.HubsProvider
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex.Message);
+                _logger.WriteLogError(ex, nameof(SendUpdateChatRoom));
             }
         }
 
@@ -565,14 +545,14 @@ namespace ServerLibrary.HubsProvider
                         UserKey = new() { AuthorityUrl = _getMyKeyConnect.AuthorityUrl, UserName = _getMyKeyConnect.UserName },
                         Chat = ToProtoModel(connect)
                     };
-                    var b = await _pods.AddChatAsync(request, cancellationToken: Context.ConnectionAborted);
+                    var b = await _pods.AddChatAsync(request);
                     if (b?.Value == true)
                     {
                         lock (AllChats)
                         {
                             if (!GetChatListForUser.Any(x => x.Key == connect.Key))
                             {
-                                AllChats.First(x => x.UserName == _getMyKeyConnect.UserName && IpAddressUtilities.CompareForAuthority(x.AuthorityUrl, _getMyKeyConnect.AuthorityUrl)).Chats.Add(connect);
+                                AllChats.First(x => x.UserName == _getMyKeyConnect.UserName && IsLocalAuthorityUrl(_getMyKeyConnect.AuthorityUrl, x.AuthorityUrl)).Chats.Add(connect);
                                 loadTask.Add(SendUpdateChatRoom(_getMyKeyConnect.AuthorityUrl, _getMyKeyConnect.UserName, connect));
                             }
                         }
@@ -582,7 +562,7 @@ namespace ServerLibrary.HubsProvider
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex.Message);
+                _logger.WriteLogError(ex, nameof(SaveNewConnect));
             }
         }
 
@@ -610,7 +590,7 @@ namespace ServerLibrary.HubsProvider
                         },
                         NewName = newName
                     };
-                    var b = await _pods.UpdateNameChatAsync(request, cancellationToken: Context.ConnectionAborted);
+                    var b = await _pods.UpdateNameChatAsync(request);
                     if (b.Value == true)
                     {
                         conn.NameRoom = newName;
@@ -620,7 +600,7 @@ namespace ServerLibrary.HubsProvider
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex.Message);
+                _logger.WriteLogError(ex, nameof(ChangeNameConnect));
             }
         }
 
@@ -642,7 +622,7 @@ namespace ServerLibrary.HubsProvider
                 if (con != null)
                 {
                     var requestConnect = new JoinModel(new(con) { Items = new() { new(_getMyKeyConnect.AuthorityUrl, _getMyKeyConnect.UserName) } }, _getMyKeyConnect, null);
-                    foreach (var connect in con.Items.Where(s => s.UserName != _getMyKeyConnect.UserName | !IpAddressUtilities.CompareForAuthority(s.AuthorityUrl, _getMyKeyConnect.AuthorityUrl)))
+                    foreach (var connect in con.Items.Where(s => s.UserName != _getMyKeyConnect.UserName | !IsLocalAuthorityUrl(_getMyKeyConnect.AuthorityUrl, s.AuthorityUrl)))
                     {
                         if (connect != null && !string.IsNullOrEmpty(connect.AuthorityUrl))
                         {
@@ -651,18 +631,12 @@ namespace ServerLibrary.HubsProvider
                                 requestConnect.ForUrl = new(connect.AuthorityUrl, connect.UserName);
 
                                 //для локальных пользователей
-                                if (IpAddressUtilities.CompareForAuthority(_getMyKeyConnect.AuthorityUrl, connect.AuthorityUrl))
-                                {
-                                    loadTask.Add(SetDeleteItemsForChatRoom(requestConnect));
-                                }
-                                else //для удаленных пользователей
-                                {
-                                    _ = SendJsonToRemoteClient(connect.AuthorityUrl, "SetDeleteItemsForChatRoom", requestConnect);
-                                }
+
+                                loadTask.Add(SendLocalOrRemotaRequest(SetDeleteItemsForChatRoom, requestConnect, _getMyKeyConnect.AuthorityUrl, connect.AuthorityUrl));
                             }
                             catch (Exception ex)
                             {
-                                _logger.LogError(ex.Message);
+                                _logger.WriteLogError(ex, $"{nameof(DeleteChatRoom)} for {connect.AuthorityUrl}");
                             }
                         }
                     }
@@ -675,10 +649,28 @@ namespace ServerLibrary.HubsProvider
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex.Message);
+                _logger.WriteLogError(ex, nameof(DeleteChatRoom));
             }
         }
 
+        async Task SendLocalOrRemotaRequest<TRequest>(Func<TRequest, Task> action, TRequest data, string? myUrl, string? remoteUrl)
+        {
+            try
+            {
+                if (IsLocalAuthorityUrl(myUrl, remoteUrl))
+                {
+                    await action.Invoke(data);
+                }
+                else //для удаленных пользователей
+                {
+                    _ = SendJsonToRemoteClient(remoteUrl, action.GetMethodInfo().Name, data);
+                }
+            }
+            catch (Exception ex)
+            {
+                _logger.WriteLogError(ex, nameof(SendLocalOrRemotaRequest));
+            }
+        }
 
         async Task DeleteChat(string forUrl, string forUser, Guid keyChatRoom)
         {
@@ -690,11 +682,11 @@ namespace ServerLibrary.HubsProvider
                 {
                     UserKey = new() { AuthorityUrl = forUrl, UserName = forUser },
                     ChatKey = keyChatRoom.ToString(),
-                }, cancellationToken: Context.ConnectionAborted);
+                });
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex.Message);
+                _logger.WriteLogError(ex, nameof(DeleteChat));
             }
         }
 
@@ -730,14 +722,8 @@ namespace ServerLibrary.HubsProvider
 
                                             var requestConnect = new KeyChatForUrl() { KeyChatRoom = keyChatRoom, RemoteUrl = new(forUrl, forUser), ForUrl = new(con.AuthorityUrl, con.UserName) };
 
-                                            if (IpAddressUtilities.CompareForAuthority(forUrl, con.AuthorityUrl))
-                                            {
-                                                loadTask.Add(CloseCall(requestConnect));
-                                            }
-                                            else
-                                            {
-                                                _ = SendJsonToRemoteClient(con.AuthorityUrl, "CloseCall", requestConnect);
-                                            }
+                                            loadTask.Add(SendLocalOrRemotaRequest(CloseCall, requestConnect, forUrl, con.AuthorityUrl));
+
                                         }
                                     }
                                 }
@@ -751,7 +737,7 @@ namespace ServerLibrary.HubsProvider
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex.Message);
+                _logger.WriteLogError(ex, nameof(DeleteChatRoomForUser));
             }
         }
 
@@ -774,7 +760,7 @@ namespace ServerLibrary.HubsProvider
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex.Message);
+                _logger.WriteLogError(ex, nameof(SetInCallingConnect));
             }
         }
 
@@ -808,7 +794,7 @@ namespace ServerLibrary.HubsProvider
                                     loadTask.Add(SaveToBaseNewConnectList(_getMyKeyConnect.AuthorityUrl, _getMyKeyConnect.UserName, keyChatRoom, addItems));
 
                                     //обнавляем чаты у других пользователей
-                                    foreach (var connect in conn.Items.Where(x => x.UserName != _getMyKeyConnect.UserName | !IpAddressUtilities.CompareForAuthority(_getMyKeyConnect.AuthorityUrl, x.AuthorityUrl)))
+                                    foreach (var connect in conn.Items.Where(x => x.UserName != _getMyKeyConnect.UserName | !IsLocalAuthorityUrl(_getMyKeyConnect.AuthorityUrl, x.AuthorityUrl)))
                                     {
                                         if (connect != null && !string.IsNullOrEmpty(connect.AuthorityUrl))
                                         {
@@ -816,18 +802,12 @@ namespace ServerLibrary.HubsProvider
                                             {
                                                 var requestConnect = new JoinModel(new(conn), _getMyKeyConnect, new(connect.AuthorityUrl, connect.UserName));
 
-                                                if (IpAddressUtilities.CompareForAuthority(_getMyKeyConnect.AuthorityUrl, connect.AuthorityUrl))
-                                                {
-                                                    loadTask.Add(SetAddItemsForChatRoom(requestConnect));
-                                                }
-                                                else
-                                                {
-                                                    _ = SendJsonToRemoteClient(connect.AuthorityUrl, "SetAddItemsForChatRoom", requestConnect);
-                                                }
+                                                loadTask.Add(SendLocalOrRemotaRequest(SetAddItemsForChatRoom, requestConnect, _getMyKeyConnect.AuthorityUrl, connect.AuthorityUrl));
+
                                             }
                                             catch (Exception ex)
                                             {
-                                                _logger.LogError(ex.Message);
+                                                _logger.WriteLogError(ex, $"{nameof(SendAddItemsForChatRoom)} to {nameof(SetAddItemsForChatRoom)} for {connect.AuthorityUrl}");
                                             }
                                         }
                                     }
@@ -846,20 +826,12 @@ namespace ServerLibrary.HubsProvider
 
                                                     var requestConnect = new JoinModel(new(conn), _getMyKeyConnect, new(connect.AuthorityUrl, connect.UserName));
 
-                                                    //если пользователь относится к текущему серверу
-                                                    if (IpAddressUtilities.CompareForAuthority(_getMyKeyConnect.AuthorityUrl, connect.AuthorityUrl))
-                                                    {
-                                                        loadTask.Add(JoinToChatRoom(requestConnect));
-                                                    }
-                                                    else //если пользователь относится к удаленному серверу
-                                                    {
-                                                        _ = SendJsonToRemoteClient(connect.AuthorityUrl, "JoinToChatRoom", requestConnect);
-                                                    }
+                                                    loadTask.Add(SendLocalOrRemotaRequest(JoinToChatRoom, requestConnect, _getMyKeyConnect.AuthorityUrl, connect.AuthorityUrl));
                                                 }
                                                 catch (Exception ex)
                                                 {
                                                     connect.State = StateCall.Disconnect;
-                                                    _logger.LogError(ex.Message);
+                                                    _logger.WriteLogError(ex, $"{nameof(SendAddItemsForChatRoom)} to {nameof(JoinToChatRoom)} for {connect.AuthorityUrl}");
                                                 }
                                             }
                                         }
@@ -876,7 +848,7 @@ namespace ServerLibrary.HubsProvider
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex.Message);
+                _logger.WriteLogError(ex, nameof(SendAddItemsForChatRoom));
             }
         }
 
@@ -893,11 +865,11 @@ namespace ServerLibrary.HubsProvider
             {
                 var request = new ConnectList() { Key = new() { UserKey = new() { AuthorityUrl = forUrl, UserName = forUser }, ChatKey = keyChatRoom.ToString() } };
                 request.Items.AddRange(itemsForAdd.Select(x => new PodsProto.V1.ConnectInfo() { AuthorityUrl = x.AuthorityUrl, UserName = x.UserName, State = PodsProto.V1.StateCall.Disconnect }));
-                await _pods.AddConnectsInChatAsync(request, cancellationToken: Context.ConnectionAborted);
+                await _pods.AddConnectsInChatAsync(request);
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex.Message);
+                _logger.WriteLogError(ex, nameof(SaveToBaseNewConnectList));
             }
         }
 
@@ -914,11 +886,11 @@ namespace ServerLibrary.HubsProvider
             {
                 var request = new ConnectList() { Key = new() { UserKey = new() { AuthorityUrl = forUrl, UserName = forUser }, ChatKey = keyChatRoom.ToString() } };
                 request.Items.AddRange(itemsForDelete.Select(x => new PodsProto.V1.ConnectInfo() { AuthorityUrl = x.AuthorityUrl, UserName = x.UserName, State = PodsProto.V1.StateCall.Disconnect }));
-                await _pods.DeleteConnectsInChatAsync(request, cancellationToken: Context.ConnectionAborted);
+                await _pods.DeleteConnectsInChatAsync(request);
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex.Message);
+                _logger.WriteLogError(ex, nameof(DeleteToBaseConnectListForChat));
             }
         }
 
@@ -940,9 +912,9 @@ namespace ServerLibrary.HubsProvider
                         if (GetChatListForUser.Any(x => x.Key == keyChatRoom))
                         {
                             var conn = GetChatListForUser.First(x => x.Key == keyChatRoom);
-                            if (conn.UserCreate == _getMyKeyConnect.UserName && conn.Items.Any(x => x.UserName == _getMyKeyConnect.UserName && IpAddressUtilities.CompareForAuthority(x.AuthorityUrl, _getMyKeyConnect.AuthorityUrl)))
+                            if (conn.UserCreate == _getMyKeyConnect.UserName && conn.Items.Any(x => x.UserName == _getMyKeyConnect.UserName && IsLocalAuthorityUrl(_getMyKeyConnect.AuthorityUrl, x.AuthorityUrl)))
                             {
-                                var urlList = conn.Items.Where(x => _getMyKeyConnect.UserName != x.UserName | !IpAddressUtilities.CompareForAuthority(_getMyKeyConnect.AuthorityUrl, x.AuthorityUrl)).ToList();
+                                var urlList = conn.Items.Where(x => _getMyKeyConnect.UserName != x.UserName | !IsLocalAuthorityUrl(_getMyKeyConnect.AuthorityUrl, x.AuthorityUrl)).ToList();
 
                                 conn.Items.RemoveAll(x => items.Any(d => d.UserName == x.UserName && IpAddressUtilities.CompareForAuthority(d.AuthorityUrl, x.AuthorityUrl)));
                                 //Удаляем из базы
@@ -955,19 +927,11 @@ namespace ServerLibrary.HubsProvider
                                         {
                                             var requestConnect = new JoinModel(new(conn), _getMyKeyConnect, new(connect.AuthorityUrl, connect.UserName));
 
-                                            //для локальных пользователей
-                                            if (IpAddressUtilities.CompareForAuthority(_getMyKeyConnect.AuthorityUrl, connect.AuthorityUrl))
-                                            {
-                                                loadTask.Add(SetDeleteItemsForChatRoom(requestConnect));
-                                            }
-                                            else //для удаленных пользователей
-                                            {
-                                                _ = SendJsonToRemoteClient(connect.AuthorityUrl, "SetDeleteItemsForChatRoom", requestConnect);
-                                            }
+                                            loadTask.Add(SendLocalOrRemotaRequest(SetDeleteItemsForChatRoom, requestConnect, _getMyKeyConnect.AuthorityUrl, connect.AuthorityUrl));
                                         }
                                         catch (Exception ex)
                                         {
-                                            _logger.LogError(ex.Message);
+                                            _logger.WriteLogError(ex, $"{nameof(SendDeleteItemsForChatRoom)} for {connect.AuthorityUrl}");
                                         }
                                     }
                                 }
@@ -981,7 +945,7 @@ namespace ServerLibrary.HubsProvider
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex.Message);
+                _logger.WriteLogError(ex, nameof(SendDeleteItemsForChatRoom));
             }
         }
 
@@ -996,11 +960,7 @@ namespace ServerLibrary.HubsProvider
             {
                 if (!string.IsNullOrEmpty(model.ForUrl?.UserName) && !string.IsNullOrEmpty(model.RemoteUrl?.UserName))
                 {
-                    List<Task> loadTask = new()
-                    {
-                        UpdateStateActiveContact(model.RemoteUrl.AuthorityUrl, model.RemoteUrl.UserName, DateTime.UtcNow)
-                    };
-
+                    List<Task> loadTask = new();
                     lock (AllChats)
                     {
                         var conn = FindChatForKey(model.ForUrl.UserName, model.ForUrl.AuthorityUrl, model.Connect.Key);
@@ -1045,7 +1005,7 @@ namespace ServerLibrary.HubsProvider
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex.Message);
+                _logger.WriteLogError(ex, nameof(SetAddItemsForChatRoom));
             }
         }
 
@@ -1060,10 +1020,7 @@ namespace ServerLibrary.HubsProvider
             {
                 if (!string.IsNullOrEmpty(model.ForUrl?.UserName) && !string.IsNullOrEmpty(model.ForUrl.AuthorityUrl) && !string.IsNullOrEmpty(model.RemoteUrl?.UserName))
                 {
-                    List<Task> loadTask = new()
-                    {
-                        UpdateStateActiveContact(model.RemoteUrl.AuthorityUrl, model.RemoteUrl.UserName, DateTime.UtcNow)
-                    };
+                    List<Task> loadTask = new();
                     lock (AllChats)
                     {
                         var conn = FindChatForKey(model.ForUrl.UserName, model.ForUrl.AuthorityUrl, model.Connect.Key);
@@ -1117,50 +1074,14 @@ namespace ServerLibrary.HubsProvider
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex.Message);
+                _logger.WriteLogError(ex, nameof(SetDeleteItemsForChatRoom));
             }
         }
 
-        /// <summary>
-        /// Получаем(создаем) http клиента для адреса
-        /// </summary>
-        /// <param name="authorityUrl"></param>
-        /// <returns></returns>
-        HttpClient? GetHttpClient(string authorityUrl)
+        bool IsLocalAuthorityUrl(string? myUrl, string? remoteUrl)
         {
-            try
-            {
-                authorityUrl = IpAddressUtilities.GetAuthority(authorityUrl);
-                lock (_httpClients)
-                {
-                    if (_httpClients.ContainsKey(authorityUrl))
-                    {
-                        return _httpClients[authorityUrl];
-                    }
-
-                    if (!string.IsNullOrEmpty(authorityUrl) && !IpAddressUtilities.CompareForAuthority(authorityUrl, _getMyKeyConnect?.AuthorityUrl))
-                    {
-                        var absoluteUri = $"https://{authorityUrl}";
-                        var handler = new HttpClientHandler();
-                        handler.ClientCertificateOptions = ClientCertificateOption.Manual;
-                        handler.ServerCertificateCustomValidationCallback =
-                            (httpRequestMessage, cert, cetChain, policyErrors) =>
-                            {
-                                return true;
-                            };
-
-                        var httpClient = new HttpClient(handler);
-                        httpClient.BaseAddress = new Uri(absoluteUri);
-                        _httpClients.Add(authorityUrl, httpClient);
-                        return httpClient;
-                    }
-                }
-            }
-            catch (Exception ex)
-            {
-                _logger.LogError(ex.Message);
-            }
-            return null;
+            if (string.IsNullOrWhiteSpace(remoteUrl)) return false;
+            return (IpAddressUtilities.CompareForHost(remoteUrl, "localhost") || IpAddressUtilities.CompareForHost(remoteUrl, "127.0.0.1") || IpAddressUtilities.CompareForHost(remoteUrl, "0.0.0.0") || IpAddressUtilities.CompareForAuthority(remoteUrl, myUrl));
         }
 
         /// <summary>
@@ -1172,33 +1093,41 @@ namespace ServerLibrary.HubsProvider
         /// <param name="model">данные</param>
         /// <param name="cancellationToken"></param>
         /// <returns></returns>
-        async Task<HttpStatusCode> SendJsonToRemoteClient<TData>(string? forUrl, string methodName, TData model, CancellationToken cancellationToken = default)
+        Task<HttpStatusCode> SendJsonToRemoteClient<TData>(string? forUrl, string methodName, TData model, CancellationToken cancellationToken = default)
         {
-            return await SendRemoteClient(forUrl, methodName, JsonContent.Create(model), cancellationToken);
+            return SendRemoteClient(forUrl, methodName, JsonContent.Create(model), cancellationToken);
         }
 
         async Task<HttpStatusCode> SendRemoteClient(string? forUrl, string methodName, HttpContent model, CancellationToken cancellationToken = default)
         {
-            forUrl = IpAddressUtilities.GetAuthority(forUrl);
-            if (!string.IsNullOrEmpty(forUrl))
+            try
             {
-                var httpClient = GetHttpClient(forUrl);
-                if (httpClient != null)
+                forUrl = IpAddressUtilities.GetAuthority(forUrl);
+                if (!string.IsNullOrEmpty(forUrl) && !IsLocalAuthorityUrl(_getMyKeyConnect?.AuthorityUrl, forUrl))
                 {
-                    try
+                    var absoluteUri = $"https://{forUrl}";
+                    var httpClient = _httpClient.GetHttpClient(absoluteUri);
+                    if (httpClient != null)
                     {
-                        var result = await httpClient.PostAsync($"api/v1/chat/{methodName}", model, cancellationToken);
-                        return result.StatusCode;
-                    }
-                    catch (Exception ex)
-                    {
-                        _logger.LogError(ex.Message);
+                        try
+                        {
+                            var result = await httpClient.PostAsync($"api/v1/chat/{methodName}", model, cancellationToken);
+                            return result.StatusCode;
+                        }
+                        catch (Exception ex)
+                        {
+                            _httpClient.RemoveClient(absoluteUri);
+                            _logger.WriteLogError(ex, $"{nameof(SendRemoteClient)} for {forUrl}, methodName {methodName}");
+                        }
                     }
                 }
             }
+            catch (Exception ex)
+            {
+                _logger.WriteLogError(ex, $"{nameof(SendRemoteClient)} for {forUrl}");
+            }
             return HttpStatusCode.BadRequest;
         }
-
 
         public async Task SendAllUsersFile(Guid keyChatRoom, string Message, string fullPath)
         {
@@ -1213,11 +1142,11 @@ namespace ServerLibrary.HubsProvider
 
                     fullPath = Path.Combine(DirectoryTmp, fullPath);
 
-                    var items = conn.Items.Where(x => x.UserName != _getMyKeyConnect?.UserName | !IpAddressUtilities.CompareForAuthority(x.AuthorityUrl, _getMyKeyConnect?.AuthorityUrl)).GroupBy(x => x.AuthorityUrl).ToList();
+                    var items = conn.Items.Where(x => x.UserName != _getMyKeyConnect?.UserName | !IsLocalAuthorityUrl(_getMyKeyConnect?.AuthorityUrl, x.AuthorityUrl)).GroupBy(x => x.AuthorityUrl).ToList();
 
-                    var myUrls = items.Where(x => x.Key == _getMyKeyConnect.AuthorityUrl).ToList().SelectMany(x => x);
+                    var myUrls = items.Where(x => IsLocalAuthorityUrl(_getMyKeyConnect.AuthorityUrl, x.Key)).ToList().SelectMany(x => x);
 
-                    var otherUrl = items.Where(x => x.Key != _getMyKeyConnect.AuthorityUrl).ToList();
+                    var otherUrl = items.Where(x => !IsLocalAuthorityUrl(_getMyKeyConnect.AuthorityUrl, x.Key)).ToList();
 
                     ReplicateFilesRequest request = new()
                     {
@@ -1232,7 +1161,7 @@ namespace ServerLibrary.HubsProvider
                         try
                         {
                             request.UserNames = forUrl.Select(x => x.UserName ?? string.Empty).ToArray();
-                            await SendJsonToRemoteClient(forUrl.Key, "ReplicateFiles", request);
+                            _ = SendJsonToRemoteClient(forUrl.Key, nameof(ReplicateFiles), request);
                         }
                         catch (Exception ex)
                         {
@@ -1313,7 +1242,7 @@ namespace ServerLibrary.HubsProvider
 
                             if (GetStateCalling(conn) <= StateCall.Disconnect)
                             {
-                                var sendToUrl = conn.Items.Where(x => x.UserName != _getMyKeyConnect.UserName | !IpAddressUtilities.CompareForAuthority(x.AuthorityUrl, _getMyKeyConnect.AuthorityUrl));
+                                var sendToUrl = conn.Items.Where(x => x.UserName != _getMyKeyConnect.UserName | !IsLocalAuthorityUrl(_getMyKeyConnect.AuthorityUrl, x.AuthorityUrl));
 
                                 conn.IdUiConnect = _connections.GetGuidForContextId(Context.ConnectionId);
 
@@ -1335,19 +1264,13 @@ namespace ServerLibrary.HubsProvider
 
                                                 var requestConnect = new JoinModel() { Connect = new(conn), RemoteUrl = _getMyKeyConnect, ForUrl = new(connect.AuthorityUrl, connect.UserName) };
 
-                                                if (IpAddressUtilities.CompareForAuthority(_getMyKeyConnect.AuthorityUrl, connect.AuthorityUrl))
-                                                {
-                                                    loadTask.Add(JoinToChatRoom(requestConnect));
-                                                }
-                                                else
-                                                {
-                                                    _ = SendJsonToRemoteClient(connect.AuthorityUrl, "JoinToChatRoom", requestConnect);
-                                                }
+                                                loadTask.Add(SendLocalOrRemotaRequest(JoinToChatRoom, requestConnect, _getMyKeyConnect.AuthorityUrl, connect.AuthorityUrl));
+
                                             }
                                             catch (Exception ex)
                                             {
                                                 connect.State = StateCall.Error;
-                                                _logger.LogError(ex.Message);
+                                                _logger.WriteLogError(ex, $"{nameof(StartChatRoom)} for {connect.AuthorityUrl}");
                                             }
                                         }
                                     }
@@ -1367,7 +1290,7 @@ namespace ServerLibrary.HubsProvider
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex.Message);
+                _logger.WriteLogError(ex, nameof(StartChatRoom));
             }
         }
 
@@ -1387,8 +1310,6 @@ namespace ServerLibrary.HubsProvider
                     List<Task> loadTask = new();
                     lock (AllChats)
                     {
-                        loadTask.Add(UpdateStateActiveContact(model.RemoteUrl.AuthorityUrl, model.RemoteUrl.UserName, DateTime.UtcNow));
-
                         _logger.LogTrace(@"Запрос на создание комнаты {NameRoom}, от {RemoteUrl}, для {UserName}", model.Connect.NameRoom, model.RemoteUrl.UserName, model.ForUrl.UserName);
                         if (model.Connect.Key != Guid.Empty && model.Connect.Items.Count > 0)
                         {
@@ -1445,10 +1366,12 @@ namespace ServerLibrary.HubsProvider
                                     loadTask.Add(AddMessageForUser(model.ForUrl.AuthorityUrl, model.ForUrl.UserName, findChats.Key, new(model.RemoteUrl.AuthorityUrl, model.RemoteUrl.UserName, DispRep["IN_CALL"])));
 
                                     PushMessageChat pushMessage = new();
-                                    pushMessage.AuthorityUrl = $"/";
+                                    pushMessage.Url = $"/";
+                                    pushMessage.Title = findChats.NameRoom;
                                     pushMessage.KeyChatRoom = findChats.Key.ToString();
                                     pushMessage.ForUser = model.ForUrl?.UserName;
-                                    pushMessage.Message = $"Входящий вызов для {model.ForUrl?.UserName} к {findChats.NameRoom} от {GetCuName(model.RemoteUrl?.AuthorityUrl)} - {model.RemoteUrl?.UserName}";
+                                    pushMessage.ForUrl = model.ForUrl?.AuthorityUrl;
+                                    pushMessage.Message = $"{DispRep["IN_CALL"]} от {GetCuName(model.RemoteUrl?.AuthorityUrl)} - {model.RemoteUrl?.UserName}";
 
                                     loadTask.Add(SendPushAsync(pushMessage));
 
@@ -1457,14 +1380,7 @@ namespace ServerLibrary.HubsProvider
 
                                 var requestConnect = new AnswerForJoin() { KeyChatRoom = findChats.Key, RemoteUrl = model.ForUrl, ForUrl = model.RemoteUrl, TypeAnswer = response };
 
-                                if (model.ForUrl?.AuthorityUrl == model.RemoteUrl?.AuthorityUrl)
-                                {
-                                    loadTask.Add(AnswerForJoinChatRoom(requestConnect));
-                                }
-                                else
-                                {
-                                    _ = SendJsonToRemoteClient(model.RemoteUrl?.AuthorityUrl, "AnswerForJoinChatRoom", requestConnect);
-                                }
+                                loadTask.Add(SendLocalOrRemotaRequest(AnswerForJoinChatRoom, requestConnect, model.ForUrl?.AuthorityUrl, model.RemoteUrl?.AuthorityUrl));
 
                             }
                         }
@@ -1474,7 +1390,7 @@ namespace ServerLibrary.HubsProvider
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex.Message);
+                _logger.WriteLogError(ex, nameof(JoinToChatRoom));
             }
         }
 
@@ -1527,7 +1443,7 @@ namespace ServerLibrary.HubsProvider
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex.Message);
+                _logger.WriteLogError(ex, nameof(AnswerForJoinChatRoom));
             }
         }
 
@@ -1571,7 +1487,7 @@ namespace ServerLibrary.HubsProvider
                                     x.State = StateCall.Disconnect;
                                 });
 
-                                foreach (var connect in conn.Items.Where(x => x.UserName != _getMyKeyConnect.UserName | !IpAddressUtilities.CompareForAuthority(_getMyKeyConnect?.AuthorityUrl, x.AuthorityUrl)))
+                                foreach (var connect in conn.Items.Where(x => x.UserName != _getMyKeyConnect.UserName | !IsLocalAuthorityUrl(_getMyKeyConnect?.AuthorityUrl, x.AuthorityUrl)))
                                 {
                                     if (connect != null && !string.IsNullOrEmpty(connect.AuthorityUrl))
                                     {
@@ -1582,15 +1498,8 @@ namespace ServerLibrary.HubsProvider
 
                                             var requestConnect = new KeyChatForUrl { KeyChatRoom = keyChatRoom, RemoteUrl = _getMyKeyConnect, ForUrl = new(connect.AuthorityUrl, connect.UserName) };
 
-                                            if (IpAddressUtilities.CompareForAuthority(connect.AuthorityUrl, _getMyKeyConnect.AuthorityUrl))
-                                            {
-                                                //отправляем согласие на Р2Р
-                                                loadTask.Add(GoConnectionP2P(requestConnect));
-                                            }
-                                            else
-                                            {
-                                                _ = SendJsonToRemoteClient(connect.AuthorityUrl, "GoConnectionP2P", requestConnect);
-                                            }
+                                            //отправляем согласие на Р2Р
+                                            loadTask.Add(SendLocalOrRemotaRequest(GoConnectionP2P, requestConnect, _getMyKeyConnect.AuthorityUrl, connect.AuthorityUrl));
                                         }
                                         catch (Exception ex)
                                         {
@@ -1611,7 +1520,7 @@ namespace ServerLibrary.HubsProvider
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex.Message);
+                _logger.WriteLogError(ex, nameof(ReadyCreateP2P));
             }
         }
 
@@ -1626,10 +1535,7 @@ namespace ServerLibrary.HubsProvider
             {
                 if (!string.IsNullOrEmpty(model.ForUrl?.UserName) && !string.IsNullOrEmpty(model.RemoteUrl?.UserName))
                 {
-                    List<Task> loadTask = new()
-                    {
-                        UpdateStateActiveContact(model.RemoteUrl.AuthorityUrl, model.RemoteUrl.UserName, DateTime.UtcNow)
-                    };
+                    List<Task> loadTask = new();
                     lock (AllChats)
                     {
                         var conn = FindChatForKey(model.ForUrl.UserName, model.ForUrl.AuthorityUrl, model.KeyChatRoom);
@@ -1663,7 +1569,7 @@ namespace ServerLibrary.HubsProvider
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex.Message);
+                _logger.WriteLogError(ex, nameof(GoConnectionP2P));
             }
         }
 
@@ -1702,14 +1608,8 @@ namespace ServerLibrary.HubsProvider
                                     loadTask.Add(LoadAnswerForUrl(keyChatRoom, _getMyKeyConnect.AuthorityUrl, _getMyKeyConnect.UserName, forUrl, forUserName, StateCall.CreateP2P, 10, async (keyRoom, myUser, forUrl, forUser) => await ErrorConnectP2P(keyRoom, myUser, forUrl, forUser)));
 
                                     var requestConnect = new KeyChatForUrlAndValue() { KeyChatRoom = keyChatRoom, RemoteUrl = _getMyKeyConnect, ForUrl = new(con.AuthorityUrl, con.UserName), Value = offer };
-                                    if (IpAddressUtilities.CompareForAuthority(con.AuthorityUrl, _getMyKeyConnect.AuthorityUrl))
-                                    {
-                                        loadTask.Add(SetRemoteOfferForUrl(requestConnect));
-                                    }
-                                    else
-                                    {
-                                        _ = SendJsonToRemoteClient(forUrl, "SetRemoteOfferForUrl", requestConnect);
-                                    }
+
+                                    loadTask.Add(SendLocalOrRemotaRequest(SetRemoteOfferForUrl, requestConnect, _getMyKeyConnect.AuthorityUrl, con.AuthorityUrl));
                                 }
                                 loadTask.Add(SendUpdateChatRoom(_getMyKeyConnect.AuthorityUrl, _getMyKeyConnect.UserName, conn));
                             }
@@ -1720,7 +1620,7 @@ namespace ServerLibrary.HubsProvider
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex.Message);
+                _logger.WriteLogError(ex, nameof(SendOfferForClient));
             }
         }
 
@@ -1762,7 +1662,7 @@ namespace ServerLibrary.HubsProvider
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex.Message);
+                _logger.WriteLogError(ex, nameof(SetRemoteOfferForUrl));
             }
         }
 
@@ -1808,14 +1708,8 @@ namespace ServerLibrary.HubsProvider
                                     }
 
                                     var requestConnect = new KeyChatForUrlAndValue() { KeyChatRoom = keyChatRoom, RemoteUrl = _getMyKeyConnect, ForUrl = new(con.AuthorityUrl, con.UserName), Value = answer };
-                                    if (IpAddressUtilities.CompareForAuthority(con.AuthorityUrl, _getMyKeyConnect.AuthorityUrl))
-                                    {
-                                        loadTask.Add(SetAnswerForRemoteClient(requestConnect));
-                                    }
-                                    else
-                                    {
-                                        _ = SendJsonToRemoteClient(forUrl, "SetAnswerForRemoteClient", requestConnect);
-                                    }
+
+                                    loadTask.Add(SendLocalOrRemotaRequest(SetAnswerForRemoteClient, requestConnect, _getMyKeyConnect.AuthorityUrl, con.AuthorityUrl));
                                 }
                                 loadTask.Add(SendUpdateChatRoom(_getMyKeyConnect.AuthorityUrl, _getMyKeyConnect.UserName, conn));
                             }
@@ -1826,7 +1720,7 @@ namespace ServerLibrary.HubsProvider
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex.Message);
+                _logger.WriteLogError(ex, nameof(SendAnswerForRemoteClient));
             }
         }
 
@@ -1867,7 +1761,7 @@ namespace ServerLibrary.HubsProvider
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex.Message);
+                _logger.WriteLogError(ex, nameof(SetAnswerForRemoteClient));
             }
         }
 
@@ -1901,21 +1795,15 @@ namespace ServerLibrary.HubsProvider
                         else
                         {
                             var requestConnect = new KeyChatForUrlAndValue() { KeyChatRoom = keyChatRoom, RemoteUrl = _getMyKeyConnect, ForUrl = new(con.AuthorityUrl, con.UserName), Value = candidate };
-                            if (IpAddressUtilities.CompareForAuthority(con.AuthorityUrl, _getMyKeyConnect.AuthorityUrl))
-                            {
-                                await SendCandidate(requestConnect);
-                            }
-                            else
-                            {
-                                await SendJsonToRemoteClient(forUrl, "SendCandidate", requestConnect);
-                            }
+
+                            await SendLocalOrRemotaRequest(SendCandidate, requestConnect, _getMyKeyConnect.AuthorityUrl, con.AuthorityUrl);
                         }
                     }
                 }
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex.Message);
+                _logger.WriteLogError(ex, nameof(SendCandidateForUrl));
             }
         }
 
@@ -1943,7 +1831,7 @@ namespace ServerLibrary.HubsProvider
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex.Message);
+                _logger.WriteLogError(ex, nameof(SendCandidate));
             }
         }
 
@@ -1982,7 +1870,7 @@ namespace ServerLibrary.HubsProvider
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex.Message);
+                _logger.WriteLogError(ex, nameof(DisconnectP2P));
             }
         }
 
@@ -2020,7 +1908,7 @@ namespace ServerLibrary.HubsProvider
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex.Message);
+                _logger.WriteLogError(ex, nameof(ConnectedP2P));
             }
         }
 
@@ -2042,7 +1930,7 @@ namespace ServerLibrary.HubsProvider
                         if (conn != null && conn.IdUiConnect == _connections.GetGuidForContextId(Context.ConnectionId) && GetStateCalling(conn) <= StateCall.Calling)
                         {
                             loadTask.Add(AddMessageForUser(_getMyKeyConnect.AuthorityUrl, _getMyKeyConnect.UserName, keyChatRoom, new(_getMyKeyConnect.AuthorityUrl, _getMyKeyConnect.UserName, DispRep["CALL_CANCEL"])));
-                            foreach (var connect in conn.Items.Where(x => x.UserName != _getMyKeyConnect.UserName | !IpAddressUtilities.CompareForAuthority(_getMyKeyConnect.AuthorityUrl, x.AuthorityUrl)))
+                            foreach (var connect in conn.Items.Where(x => x.UserName != _getMyKeyConnect.UserName | !IsLocalAuthorityUrl(_getMyKeyConnect.AuthorityUrl, x.AuthorityUrl)))
                             {
                                 if (connect != null && !string.IsNullOrEmpty(connect.AuthorityUrl))
                                 {
@@ -2051,19 +1939,13 @@ namespace ServerLibrary.HubsProvider
                                         connect.State = StateCall.Aborted;
 
                                         var requestConnect = new KeyChatForUrl { KeyChatRoom = keyChatRoom, RemoteUrl = _getMyKeyConnect, ForUrl = new(connect.AuthorityUrl, connect.UserName) };
-                                        if (IpAddressUtilities.CompareForAuthority(connect.AuthorityUrl, _getMyKeyConnect.AuthorityUrl))
-                                        {
-                                            //Отправляем отмену исходящего вызова
-                                            loadTask.Add(CancelOutCallRemote(requestConnect));
-                                        }
-                                        else
-                                        {
-                                            _ = SendJsonToRemoteClient(connect.AuthorityUrl, "CancelOutCallRemote", requestConnect);
-                                        }
+
+                                        //Отправляем отмену исходящего вызова
+                                        loadTask.Add(SendLocalOrRemotaRequest(CancelOutCallRemote, requestConnect, _getMyKeyConnect.AuthorityUrl, connect.AuthorityUrl));
                                     }
                                     catch (Exception ex)
                                     {
-                                        _logger.LogError(ex.Message);
+                                        _logger.WriteLogError(ex, $"{nameof(CancelOutCallLocal)} for {connect.AuthorityUrl}");
                                     }
                                 }
                             }
@@ -2077,7 +1959,7 @@ namespace ServerLibrary.HubsProvider
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex.Message);
+                _logger.WriteLogError(ex, nameof(CancelOutCallLocal));
             }
         }
 
@@ -2128,7 +2010,7 @@ namespace ServerLibrary.HubsProvider
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex.Message);
+                _logger.WriteLogError(ex, nameof(CancelOutCallRemote));
             }
         }
 
@@ -2150,25 +2032,19 @@ namespace ServerLibrary.HubsProvider
                         _logger.LogTrace(@"{MyName} отмена входящего вызов к комнате {NameRoom}", _getMyKeyConnect.UserName, conn?.NameRoom);
                         if (conn != null && conn.IdUiConnect == null)
                         {
-                            foreach (var connect in conn.Items.Where(x => _getMyKeyConnect.UserName != x.UserName | !IpAddressUtilities.CompareForAuthority(_getMyKeyConnect.AuthorityUrl, x.AuthorityUrl)))
+                            foreach (var connect in conn.Items.Where(x => _getMyKeyConnect.UserName != x.UserName | !IsLocalAuthorityUrl(_getMyKeyConnect.AuthorityUrl, x.AuthorityUrl)))
                             {
                                 if (connect != null && !string.IsNullOrEmpty(connect.AuthorityUrl))
                                 {
                                     try
                                     {
                                         var requestConnect = new KeyChatForUrl { KeyChatRoom = keyChatRoom, RemoteUrl = _getMyKeyConnect, ForUrl = new(connect.AuthorityUrl, connect.UserName) };
-                                        if (IpAddressUtilities.CompareForAuthority(connect.AuthorityUrl, _getMyKeyConnect.AuthorityUrl))
-                                        {
-                                            loadTask.Add(CancelCallRemote(requestConnect));
-                                        }
-                                        else
-                                        {
-                                            _ = SendJsonToRemoteClient(connect.AuthorityUrl, "CancelCallRemote", requestConnect);
-                                        }
+
+                                        loadTask.Add(SendLocalOrRemotaRequest(CancelCallRemote, requestConnect, _getMyKeyConnect.AuthorityUrl, connect.AuthorityUrl));
                                     }
                                     catch (Exception ex)
                                     {
-                                        _logger.LogError(ex.Message);
+                                        _logger.WriteLogError(ex, $"{nameof(CancelCallLocal)} for {connect.AuthorityUrl}");
                                     }
                                 }
                             }
@@ -2182,7 +2058,7 @@ namespace ServerLibrary.HubsProvider
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex.Message);
+                _logger.WriteLogError(ex, nameof(CancelCallLocal));
             }
         }
 
@@ -2223,7 +2099,7 @@ namespace ServerLibrary.HubsProvider
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex.Message);
+                _logger.WriteLogError(ex, nameof(CancelCallRemote));
             }
         }
 
@@ -2252,21 +2128,15 @@ namespace ServerLibrary.HubsProvider
                                     x.State = StateCall.Disconnect;
                                 });
 
-                                foreach (var connect in conn.Items.Where(x => _getMyKeyConnect.UserName != x.UserName | !IpAddressUtilities.CompareForAuthority(_getMyKeyConnect?.AuthorityUrl, x.AuthorityUrl)))
+                                foreach (var connect in conn.Items.Where(x => _getMyKeyConnect.UserName != x.UserName | !IsLocalAuthorityUrl(_getMyKeyConnect?.AuthorityUrl, x.AuthorityUrl)))
                                 {
                                     if (connect != null && !string.IsNullOrEmpty(connect.AuthorityUrl))
                                     {
                                         try
                                         {
                                             var requestConnect = new KeyChatForUrl { KeyChatRoom = keyChatRoom, RemoteUrl = _getMyKeyConnect, ForUrl = new(connect.AuthorityUrl, connect.UserName) };
-                                            if (IpAddressUtilities.CompareForAuthority(connect.AuthorityUrl, _getMyKeyConnect.AuthorityUrl))
-                                            {
-                                                loadTask.Add(CloseCall(requestConnect));
-                                            }
-                                            else
-                                            {
-                                                _ = SendJsonToRemoteClient(connect.AuthorityUrl, "CloseCall", requestConnect);
-                                            }
+
+                                            loadTask.Add(SendLocalOrRemotaRequest(CloseCall, requestConnect, _getMyKeyConnect.AuthorityUrl, connect.AuthorityUrl));
                                         }
                                         catch (Exception ex)
                                         {
@@ -2286,7 +2156,7 @@ namespace ServerLibrary.HubsProvider
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex.Message);
+                _logger.WriteLogError(ex, nameof(CloseCallAction));
             }
         }
 
@@ -2334,7 +2204,7 @@ namespace ServerLibrary.HubsProvider
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex.Message);
+                _logger.WriteLogError(ex, nameof(CloseCall));
             }
         }
 
@@ -2362,7 +2232,7 @@ namespace ServerLibrary.HubsProvider
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex.Message);
+                _logger.WriteLogError(ex, nameof(CloseP2P));
             }
         }
 
@@ -2406,7 +2276,7 @@ namespace ServerLibrary.HubsProvider
                                 },
                                 Chat = ToProtoModel(model.Connect)
                             };
-                            var b = _pods.AddChat(request, cancellationToken: Context.ConnectionAborted);
+                            var b = _pods.AddChat(request);
                             if (b?.Value == true)
                             {
                                 chats.Add(new ChatInfo(model.Connect));
@@ -2424,7 +2294,7 @@ namespace ServerLibrary.HubsProvider
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex.Message);
+                _logger.WriteLogError(ex, nameof(CreateChatRoom));
             }
         }
 
@@ -2468,7 +2338,7 @@ namespace ServerLibrary.HubsProvider
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex.Message);
+                _logger.WriteLogError(ex, nameof(LoadAnswerForUrl));
             }
         }
         /// <summary>
@@ -2543,7 +2413,7 @@ namespace ServerLibrary.HubsProvider
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex.Message);
+                _logger.WriteLogError(ex, nameof(LoadChangeStateChat));
             }
         }
 
@@ -2651,7 +2521,7 @@ namespace ServerLibrary.HubsProvider
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex.Message);
+                _logger.WriteLogError(ex, nameof(AddMessageForUser));
             }
         }
 
@@ -2676,11 +2546,10 @@ namespace ServerLibrary.HubsProvider
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex.Message);
+                _logger.WriteLogError(ex, nameof(StartRecord));
             }
             return string.Empty;
         }
-
 
         public string CreatePathForChat(Guid keyChatRoom)
         {
@@ -2690,7 +2559,7 @@ namespace ServerLibrary.HubsProvider
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex.Message);
+                _logger.WriteLogError(ex, nameof(CreatePathForChat));
             }
             return string.Empty;
         }
@@ -2707,7 +2576,7 @@ namespace ServerLibrary.HubsProvider
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex.Message);
+                _logger.WriteLogError(ex, nameof(CreatePathForChat));
             }
             return string.Empty;
         }
@@ -2721,12 +2590,18 @@ namespace ServerLibrary.HubsProvider
         {
             try
             {
-                var payload = JsonSerializer.Serialize(pushMessage);
-                await Clients.All.SendAsync(nameof(DaprMessage.Fire_ShowPushNotify), payload);
+                var r = _connections.GetContextIdForLogin(pushMessage.ForUrl, pushMessage.ForUser);
+                if (r?.Any() ?? false)
+                {
+                    _logger.LogTrace("Отправка уведомления для {name}, сообщение {message}", pushMessage.ForUser, pushMessage.Message);
+                    var payload = JsonSerializer.Serialize(pushMessage);
+                    await Clients.Clients(r).SendAsync(nameof(DaprMessage.Fire_ShowPushNotify), payload);
+                }
+
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex.Message);
+                _logger.WriteLogError(ex, nameof(SendPushAsync));
             }
         }
 
@@ -2746,7 +2621,7 @@ namespace ServerLibrary.HubsProvider
                 if (conn != null)
                 {
                     await AddMessageForUser(_getMyKeyConnect.AuthorityUrl, _getMyKeyConnect.UserName, keyChatRoom, new(_getMyKeyConnect.AuthorityUrl, _getMyKeyConnect.UserName, message));
-                    foreach (var connect in conn.Items.Where(x => _getMyKeyConnect.UserName != x.UserName | !IpAddressUtilities.CompareForAuthority(_getMyKeyConnect.AuthorityUrl, x.AuthorityUrl)))
+                    foreach (var connect in conn.Items.Where(x => _getMyKeyConnect.UserName != x.UserName | !IsLocalAuthorityUrl(_getMyKeyConnect.AuthorityUrl, x.AuthorityUrl)))
                     {
                         if (connect != null && !string.IsNullOrEmpty(connect.AuthorityUrl))
                         {
@@ -2755,20 +2630,12 @@ namespace ServerLibrary.HubsProvider
                                 var requestCreateChat = new JoinModel { Connect = new(conn), RemoteUrl = _getMyKeyConnect, ForUrl = new(connect.AuthorityUrl, connect.UserName) };
                                 var requestConnect = new KeyChatForUrlAndValue { KeyChatRoom = keyChatRoom, RemoteUrl = _getMyKeyConnect, ForUrl = new(connect.AuthorityUrl, connect.UserName), Value = message };
 
-                                if (IpAddressUtilities.CompareForAuthority(connect.AuthorityUrl, _getMyKeyConnect.AuthorityUrl))
-                                {
-                                    await CreateChatRoom(requestCreateChat);
-                                    await SetMessage(requestConnect);
-                                }
-                                else
-                                {
-                                    _ = SendJsonToRemoteClient(connect.AuthorityUrl, "CreateChatRoom", requestCreateChat);
-                                    _ = SendJsonToRemoteClient(connect.AuthorityUrl, "SetMessage", requestConnect);
-                                }
+                                await SendLocalOrRemotaRequest(CreateChatRoom, requestCreateChat, _getMyKeyConnect.AuthorityUrl, connect.AuthorityUrl);
+                                await SendLocalOrRemotaRequest(SetMessage, requestConnect, _getMyKeyConnect.AuthorityUrl, connect.AuthorityUrl);
                             }
                             catch (Exception ex)
                             {
-                                _logger.LogError(ex.Message);
+                                _logger.WriteLogError(ex, $"{nameof(SendMessage)} for {connect.AuthorityUrl}");
                             }
                         }
                     }
@@ -2776,7 +2643,7 @@ namespace ServerLibrary.HubsProvider
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex.Message);
+                _logger.WriteLogError(ex, nameof(SendMessage));
             }
         }
 
@@ -2791,19 +2658,23 @@ namespace ServerLibrary.HubsProvider
             {
                 if (string.IsNullOrEmpty(model.ForUrl?.UserName) || string.IsNullOrEmpty(model.RemoteUrl?.UserName)) return;
 
-                await UpdateStateActiveContact(model.RemoteUrl.AuthorityUrl, model.RemoteUrl.UserName, DateTime.UtcNow);
-
                 await AddMessageForUser(model.ForUrl.AuthorityUrl, model.ForUrl.UserName, model.KeyChatRoom, new(model.RemoteUrl.AuthorityUrl, model.RemoteUrl.UserName, model.Value));
-                PushMessageChat pushMessage = new();
-                pushMessage.AuthorityUrl = $"/";
-                pushMessage.KeyChatRoom = model.KeyChatRoom.ToString();
-                pushMessage.ForUser = model.ForUrl?.UserName;
-                pushMessage.Message = $"Сообщение для {model.ForUrl?.UserName} от {GetCuName(model.RemoteUrl.AuthorityUrl)}-{model.RemoteUrl.UserName}: {string.Join("", model.Value.Take(100))}";
-                await SendPushAsync(pushMessage);
+                var con = FindChatForKey(model.ForUrl.UserName, model.ForUrl.AuthorityUrl, model.KeyChatRoom);
+                if (con != null)
+                {
+                    PushMessageChat pushMessage = new();
+                    pushMessage.Url = $"/";
+                    pushMessage.Title = con.NameRoom;
+                    pushMessage.KeyChatRoom = model.KeyChatRoom.ToString();
+                    pushMessage.ForUser = model.ForUrl?.UserName;
+                    pushMessage.ForUrl = model.ForUrl?.AuthorityUrl;
+                    pushMessage.Message = $"{GetCuName(model.RemoteUrl.AuthorityUrl)}-{model.RemoteUrl.UserName}: {string.Join("", model.Value.Take(100))}";
+                    await SendPushAsync(pushMessage);
+                }
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex.Message);
+                _logger.WriteLogError(ex, nameof(SetMessage));
             }
         }
 
@@ -2814,7 +2685,7 @@ namespace ServerLibrary.HubsProvider
         /// <returns></returns>
         string GetCuName(string? authorityUrl)
         {
-            if (string.IsNullOrEmpty(authorityUrl))
+            if (!string.IsNullOrEmpty(authorityUrl))
             {
                 return _pods.FindCuName(new StringValue() { Value = authorityUrl })?.Value ?? authorityUrl ?? string.Empty;
             }
@@ -2852,14 +2723,9 @@ namespace ServerLibrary.HubsProvider
                         loadTask.Add(LoadAnswerForUrl(keyChatRoom, _getMyKeyConnect.AuthorityUrl, _getMyKeyConnect.UserName, forUrl, forUserName, StateCall.ChangeStream, 10, async (keyRoom, myUser, forUrl, forUser) => await ErrorConnectP2P(keyRoom, myUser, forUrl, forUser)));
 
                         var requestConnect = new KeyChatForUrlAndValue() { KeyChatRoom = keyChatRoom, RemoteUrl = _getMyKeyConnect, ForUrl = new(con.AuthorityUrl, con.UserName), Value = newOffer };
-                        if (IpAddressUtilities.CompareForAuthority(con.AuthorityUrl, _getMyKeyConnect.AuthorityUrl))
-                        {
-                            loadTask.Add(SetChangeRemoteStream(requestConnect));
-                        }
-                        else
-                        {
-                            _ = SendJsonToRemoteClient(forUrl, "SetChangeRemoteStream", requestConnect);
-                        }
+
+                        loadTask.Add(SendLocalOrRemotaRequest(SetChangeRemoteStream, requestConnect, _getMyKeyConnect.AuthorityUrl, forUrl));
+
                         loadTask.Add(SendUpdateChatRoom(_getMyKeyConnect.AuthorityUrl, _getMyKeyConnect.UserName, conn));
                     }
                 }
@@ -2868,7 +2734,7 @@ namespace ServerLibrary.HubsProvider
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex.Message);
+                _logger.WriteLogError(ex, nameof(SendChangeRemoteStream));
             }
         }
 
@@ -2909,7 +2775,7 @@ namespace ServerLibrary.HubsProvider
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex.Message);
+                _logger.WriteLogError(ex, nameof(SetChangeRemoteStream));
             }
         }
 
@@ -2921,6 +2787,65 @@ namespace ServerLibrary.HubsProvider
         {
             return _connections.GetAllConnectedUser();
         }
+
+
+        public async Task WriteLocalContact()
+        {
+            try
+            {
+                ContactInfoList request = new();
+                request.List.AddRange(await GetLocalCuInfo());
+                if (request.List?.Count > 0)
+                {
+                    var currentList = await _pods.GetLocalContactAsync(new Empty());
+
+                    var b = await _pods.AddLocalContactAsync(request);
+                    if (b?.Value == true)
+                    {
+                        var addData = request.List.Select(item => new SharedLibrary.Models.ContactInfo(item.NameCu, item.AuthorityUrl, item.UserName, item.StaffId, item.LastActive?.ToDateTime()) { Type = (SharedLibrary.Models.TypeContact)item.Type });
+
+                        var deletedItems = currentList?.List.ExceptBy(request.List.Select(x => x.UserName), x => x.UserName);
+
+                        if (deletedItems?.Any() ?? false)
+                        {
+                            await RemoveConnectInfoForAllChat(deletedItems);
+                            currentList?.List.RemoveAll(x => deletedItems.Contains(x));
+                        }
+
+                        var updateData = currentList?.List.ExceptBy(request.List.Select(x => $"{x.NameCu}{x.AuthorityUrl}&{x.UserName}"), x => $"{x.NameCu}{x.AuthorityUrl}&{x.UserName}");
+
+                        if (updateData?.Any() ?? false)
+                        {
+                            lock (AllChats)
+                            {
+                                foreach (var item in updateData)
+                                {
+                                    var f = request.List.FirstOrDefault(x => x.UserName == item.UserName);
+                                    if (f != null)
+                                    {
+                                        var items = AllChats.SelectMany(x => x.Chats).SelectMany(x => x.Items).Where(x => x.AuthorityUrl == item.AuthorityUrl && x.UserName == item.UserName);
+                                        if (items != null)
+                                        {
+                                            foreach (var con in items)
+                                            {
+                                                con.AuthorityUrl = f.AuthorityUrl;
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+
+                        await Clients.All.SendCoreAsync("AddOrUpdateContactList", new[] { addData });
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                _logger.WriteLogError(ex, nameof(WriteLocalContact));
+            }
+        }
+
 
         /// <summary>
         /// Добавляем пользователей с подчиненного ПУ
@@ -2934,27 +2859,96 @@ namespace ServerLibrary.HubsProvider
                 try
                 {
                     ContactInfoList request = new();
-                    request.List.AddRange(list.Select(item => new PodsProto.V1.ContactInfo()
-                    {
-                        NameCu = item.Name,
-                        AuthorityUrl = item.AuthorityUrl,
-                        UserName = item.UserName,
-                        StaffId = item.StaffId,
-                        LastActive = item.LastActive?.ToTimestamp(),
-                        Type = PodsProto.V1.TypeContact.Remote
-                    }));
-                    var b = await _pods.AddRemoteContactAsync(request);
 
-                    if (b?.Value == true)
+                    var forUrl = list.FirstOrDefault()?.AuthorityUrl;
+                    if (!string.IsNullOrEmpty(forUrl))
                     {
-                        var addData = request.List.Select(item => new SharedLibrary.Models.ContactInfo(item.NameCu, item.AuthorityUrl, item.UserName, item.StaffId, item.LastActive?.ToDateTime()) { Type = (SharedLibrary.Models.TypeContact)item.Type });
-                        await Clients.All.SendCoreAsync("AddOrUpdateContactList", new[] { addData });
+                        var currentList = await _pods.GetRemoteContactForUrlAsync(new StringValue() { Value = forUrl });
+
+                        request.List.AddRange(list.Select(item => new PodsProto.V1.ContactInfo()
+                        {
+                            NameCu = item.Name,
+                            AuthorityUrl = item.AuthorityUrl,
+                            UserName = item.UserName,
+                            StaffId = item.StaffId,
+                            LastActive = item.LastActive?.ToTimestamp(),
+                            Type = PodsProto.V1.TypeContact.Remote
+                        }));
+                        var b = await _pods.AddRemoteContactAsync(request);
+
+                        if (b?.Value == true)
+                        {
+                            var addData = request.List.Select(item => new SharedLibrary.Models.ContactInfo(item.NameCu, item.AuthorityUrl, item.UserName, item.StaffId, item.LastActive?.ToDateTime()) { Type = (SharedLibrary.Models.TypeContact)item.Type });
+
+                            var deletedItems = currentList?.List.ExceptBy(request.List.Select(x => $"{x.AuthorityUrl}&{x.UserName}"), x => $"{x.AuthorityUrl}&{x.UserName}");
+                            if (deletedItems?.Any() ?? false)
+                            {
+                                await RemoveConnectInfoForAllChat(deletedItems);
+                            }
+                            await Clients.All.SendCoreAsync("AddOrUpdateContactList", new[] { addData });
+                        }
                     }
                 }
                 catch (Exception ex)
                 {
-                    _logger.LogError(ex.Message);
+                    _logger.WriteLogError(ex, nameof(WriteRemoteContact));
                 }
+            }
+        }
+
+        public async Task SetCurrentRemoteContactForIp(IEnumerable<string>? list)
+        {
+            if (list != null)
+            {
+                try
+                {
+                    CurrentRemoteCuArray request = new();
+                    request.List.AddRange(list);
+                    await _pods.SetCurrentRemoteContactForIpAsync(request);
+                }
+                catch (Exception ex)
+                {
+                    _logger.WriteLogError(ex, nameof(SetCurrentRemoteContactForIp));
+                }
+            }
+        }
+
+
+        async Task RemoveConnectInfoForAllChat(IEnumerable<PodsProto.V1.ContactInfo>? deletedItems)
+        {
+            try
+            {
+                if (deletedItems?.Any() ?? false)
+                {
+                    List<Task> loadTask = new();
+                    lock (AllChats)
+                    {
+                        foreach (var item in AllChats)
+                        {
+                            foreach (var chat in item.Chats)
+                            {
+                                var first = chat.Items.FirstOrDefault(x => deletedItems.Any(i => i.UserName == x.UserName && i.AuthorityUrl == x.AuthorityUrl));
+                                if (first != null)
+                                {
+                                    if (first.State >= StateCall.Calling)
+                                    {
+                                        if (!string.IsNullOrEmpty(first.AuthorityUrl) && !string.IsNullOrEmpty(first.UserName) && chat.IdUiConnect != null && _connections.AnyGuid(chat.IdUiConnect))
+                                        {
+                                            loadTask.Add(Clients.Clients(_connections.GetContextIdForGuid(chat.IdUiConnect)).SendCoreAsync("CloseP2P", new object[] { first.AuthorityUrl, first.UserName, chat.Key }));
+                                        }
+                                    }
+                                    chat.Items.Remove(first);
+                                    loadTask.Add(SendUpdateChatRoom(item.AuthorityUrl, item.UserName, chat));
+                                }
+                            }
+                        }
+                    }
+                    await Task.WhenAll(loadTask);
+                }
+            }
+            catch (Exception ex)
+            {
+                _logger.WriteLogError(ex, nameof(RemoveConnectInfoForAllChat));
             }
         }
 
@@ -2991,7 +2985,7 @@ namespace ServerLibrary.HubsProvider
                 }
                 catch (Exception ex)
                 {
-                    _logger.LogError(ex.Message);
+                    _logger.WriteLogError(ex, nameof(AddOrUpdateContact));
                 }
             }
         }
@@ -3020,7 +3014,7 @@ namespace ServerLibrary.HubsProvider
                 }
                 catch (Exception ex)
                 {
-                    _logger.LogError(ex.Message);
+                    _logger.WriteLogError(ex, nameof(RemoveNoReadMessage));
                 }
             }
         }
@@ -3032,7 +3026,7 @@ namespace ServerLibrary.HubsProvider
         /// <param name="userName"></param>
         /// <param name="lastActive"></param>
         /// <returns></returns>
-        public async Task UpdateStateActiveContact(string? authorityUrl, string? userName, DateTime? lastActive)
+        public async Task UpdateStateActiveLocalContact(string? authorityUrl, string? userName, DateTime? lastActive)
         {
             if (!string.IsNullOrEmpty(authorityUrl) && !string.IsNullOrEmpty(userName))
             {
@@ -3051,7 +3045,7 @@ namespace ServerLibrary.HubsProvider
                 }
                 catch (Exception ex)
                 {
-                    _logger.LogError(ex.Message);
+                    _logger.WriteLogError(ex, nameof(UpdateStateActiveLocalContact));
                 }
             }
         }
@@ -3089,7 +3083,7 @@ namespace ServerLibrary.HubsProvider
                 }
                 catch (Exception ex)
                 {
-                    _logger.LogError(ex.Message);
+                    _logger.WriteLogError(ex, nameof(DeleteContactForUser));
                 }
             }
             return false;
@@ -3113,21 +3107,32 @@ namespace ServerLibrary.HubsProvider
                     context?.Request.Headers.TryGetValue("Origin", out result);
                     var urlConnect = IpAddressUtilities.GetAuthority(result.FirstOrDefault());
 
+                    if (urlConnect.Contains("localhost") || urlConnect.Contains("127.0.0.1") || urlConnect.Contains("0.0.0.0"))
+                    {
+                        try
+                        {
+                            urlConnect = GetLocalAuthorityUrl().Result;
+                        }
+                        catch (Exception e)
+                        {
+                            _logger.LogError(@"Error get local ip: {message}", e.Message);
+                        }
+                    }
+
                     StringValues valuesUi = new();
                     var idUi = context?.Request.Query.TryGetValue(nameof(CookieName.AppId), out valuesUi);
                     Guid.TryParse(valuesUi.FirstOrDefault(), out var guidUi);
 
                     _logger.LogTrace(@"Новое подключение к хабу для {forUrl}, пользователь {userName}, guid {guid}, назначенный ID {Id}, локальный хост {Host}", urlConnect, userName, guidUi, Context.ConnectionId, context?.Request.Host);
 
-                    UpdateStateActiveContact(urlConnect, userName, DateTime.UtcNow).Wait();
-
                     if (!string.IsNullOrEmpty(urlConnect))
                         _connections.Add(urlConnect, Context.ConnectionId, guidUi, userName);
                 }
+
             }
             catch (Exception ex)
             {
-                _logger.WriteLogError(ex, $"{nameof(OnConnectedAsync)}");
+                _logger.WriteLogError(ex, nameof(OnConnectedAsync));
             }
             return base.OnConnectedAsync();
         }
@@ -3152,33 +3157,14 @@ namespace ServerLibrary.HubsProvider
 
                 _logger.LogTrace(@"Закрыто подключение к хабу для {forUrl}, guid {guid}, назначенный ID {Id}, локальный хост {Host}", urlConnect, guidUi, Context.ConnectionId, context?.Request.Host);
 
-                if (!string.IsNullOrEmpty(urlConnect))
-                {
-                    _connections.RemoveForConnectId(urlConnect, Context.ConnectionId);
-                }
+                _connections.RemoveForConnectId(Context.ConnectionId);
 
             }
             catch (Exception ex)
             {
-                _logger.WriteLogError(ex, $"{nameof(OnDisconnectedAsync)}");
+                _logger.WriteLogError(ex, nameof(OnDisconnectedAsync));
             }
             return base.OnConnectedAsync();
-        }
-
-        /// <summary>
-        /// Удаляем всех http клиентов 
-        /// </summary>
-        /// <returns></returns>
-        async ValueTask RemoveHttpClients()
-        {
-            if (_httpClients.Count > 0)
-            {
-                foreach (var http in _httpClients)
-                {
-                    await http.Value.DisposeAsync();
-                }
-                _httpClients.Clear();
-            }
         }
     }
 }

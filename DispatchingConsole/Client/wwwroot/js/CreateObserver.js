@@ -14,13 +14,17 @@
     };
     this.observer = new IntersectionObserver((entries, observer) => {
       // для каждой записи-целевого элемента
-      entries.forEach(entry => {
+      entries.forEach(async (entry) => {
         // если элемент является наблюдаемым
         if (entry.isIntersecting) {
           try {
             // прекращаем наблюдение
             observer.unobserve(entry.target);
-            this.dotNet.invokeMethodAsync(this.callBack, this.args);
+            let top = document.querySelector(".table-scroll-v")?.scrollTop;
+            let startHeight = entry.target.parentElement?.offsetHeight;
+            await this.dotNet.invokeMethodAsync(this.callBack, this.args);
+            let endHeight = entry.target.parentElement?.offsetHeight;            
+            document.querySelector(".table-scroll-v")?.scrollTo(0, (top + (endHeight - startHeight)));
           }
           catch (e) {
             console.log(e);

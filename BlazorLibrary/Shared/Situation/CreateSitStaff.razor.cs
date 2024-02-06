@@ -59,8 +59,6 @@ namespace BlazorLibrary.Shared.Situation
 
         bool IsPageLoad = true;
 
-        bool IsProcessing = false;
-
         protected override async Task OnInitializedAsync()
         {
             StaffId = await _User.GetLocalStaff();
@@ -338,7 +336,7 @@ namespace BlazorLibrary.Shared.Situation
             {
                 DeleteStaffSitItems DeleteRequest = new();
                 DeleteRequest.Array.AddRange(DeleteArray.Select(x => new DeleteStaffSitItem() { CmdID = NewSit.Sit, SitID = x.SitID }));
-                await Http.PostAsJsonAsync("api/v1/DeleteSitItem", JsonFormatter.Default.Format(DeleteRequest)).ContinueWith(x =>
+                await Http.PostAsJsonAsync("api/v1/DeleteSitItemStaff", JsonFormatter.Default.Format(DeleteRequest)).ContinueWith(x =>
                 {
                     if (!x.Result.IsSuccessStatusCode)
                     {
@@ -479,13 +477,10 @@ namespace BlazorLibrary.Shared.Situation
                 return;
             }
 
-            IsProcessing = true;
-
             bool IsName = false;
             if (string.IsNullOrEmpty(NewSit.SitName))
             {
                 MessageView?.AddError("", $"{DeviceRep["ErrorNull"]} {AsoRep["NameSit"].ToString().ToLower()}");
-                IsProcessing = false;
                 return;
             }
             else if (!NewSit.SitName.Equals(OldSit.SitName))
@@ -547,7 +542,6 @@ namespace BlazorLibrary.Shared.Situation
                     }
                 }
             }
-            IsProcessing = false;
         }
 
         private async Task GoCallBack()

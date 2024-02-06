@@ -36,6 +36,24 @@ namespace ServerLibrary.HubsProvider
             }
         }
 
+        public MyConnectInfo? GetMyConnect(string contextId)
+        {
+            lock (_connections)
+            {
+                if (_connections.Any(x => x.ConnectionsItem.Any(x => x.ContextId == contextId)))
+                {
+                    var first = _connections.First(x => x.ConnectionsItem.Any(x => x.ContextId == contextId));
+
+                    var userName = first.ConnectionsItem.FirstOrDefault(x => x.ContextId == contextId)?.UserName;
+                    if (!string.IsNullOrEmpty(userName) && !string.IsNullOrEmpty(first.AuthorityUrl))
+                    {
+                        return new MyConnectInfo(first.AuthorityUrl, userName);
+                    }
+                }
+            }
+            return null;
+        }
+
         public IEnumerable<string> GetContextIdForLogin(string? authorityUrl, string? userName)
         {
             if (authorityUrl != null && !string.IsNullOrEmpty(userName))
@@ -43,6 +61,20 @@ namespace ServerLibrary.HubsProvider
                 if (_connections.Any(x => IpAddressUtilities.CompareForAuthority(x.AuthorityUrl, authorityUrl)))
                 {
                     return _connections.First(x => IpAddressUtilities.CompareForAuthority(x.AuthorityUrl, authorityUrl)).ConnectionsItem.Where(x => x.UserName == userName).Select(x => x.ContextId);
+                }
+            }
+            return Enumerable.Empty<string>();
+        }
+
+        public IEnumerable<string> GetContextIdForHost(string[]? authorityUrl)
+        {
+            if (authorityUrl != null && authorityUrl.Length > 0)
+            {
+                var listContextId = _connections.Where(x => authorityUrl.Select(u => IpAddressUtilities.GetHost(u)).Contains(IpAddressUtilities.GetHost(x.AuthorityUrl)));
+
+                if (listContextId?.Any() ?? false)
+                {
+                    return listContextId.SelectMany(x => x.ConnectionsItem).Select(x => x.ContextId).Distinct();
                 }
             }
             return Enumerable.Empty<string>();
@@ -90,11 +122,11 @@ namespace ServerLibrary.HubsProvider
             return _connections.Any(x => x.ConnectionsItem.Any(x => x.IdUiConnect.Equals(guidUi)));
         }
 
-        public void RemoveForConnectId(string authorityUrl, string contextId)
+        public void RemoveForConnectId(string contextId)
         {
             lock (_connections)
             {
-                var conn = _connections.FirstOrDefault(x => IpAddressUtilities.CompareForAuthority(x.AuthorityUrl, authorityUrl));
+                var conn = _connections.FirstOrDefault(x => x.ConnectionsItem.Any(i => i.ContextId == contextId));
 
                 if (conn == null)
                 {
@@ -159,10 +191,11 @@ namespace ServerLibrary.HubsProvider
     public class PushMessageChat
     {
         public string? Title { get; set; }
-        public string? AuthorityUrl { get; set; }
+        public string? Url { get; set; }
         public string? Message { get; set; }
         public string? KeyChatRoom { get; set; }
         public string? ForUser { get; set; }
+        public string? ForUrl { get; set; }
     }
     #endregion
 }

@@ -2,14 +2,14 @@
 
 <ModalDialog Title="@(DeviceObj_ID.ObjID > 0?Model?.DeviceInfo?.CDeviceInfo?.DevName:UUZSRep["IDS_STRING_CREATE_UUZS"])" ButtonCloseEvent="CallEvent">
     <BodyContent>
-        <form id="createdeviceszs" @onsubmit="OnOK">
+        <BlazorLibrary.Shared.FormComponent.FormDefault OnSumbit="OnOK">
             @if (Model?.DeviceInfo?.CDeviceInfo != null)
             {
                 <div tabindex="1">
                     @*Наименование*@
                     <div class="mb-3">
                         <label class="form-label">@UUZSRep["IDS_STRING_NAME"]</label>
-                        <InputFocus @bind-Value="Model.DeviceInfo.CDeviceInfo.DevName" />
+                        <InputFocus @bind-Value="Model.DeviceInfo.CDeviceInfo.DevName" maxlength="255" required />
                     </div>
                     <div class="row">
                         <div class="col-md-6">
@@ -22,7 +22,7 @@
                                 }
                                 else
                                 {
-                                    <input type="number" class="form-control" @bind="Model.DeviceInfo.CDeviceInfo.DevID">
+                                    <input type="number" class="form-control" @bind="Model.DeviceInfo.CDeviceInfo.DevID" required>
                                 }
                             </div>
                             @*Глобальный номер*@
@@ -30,7 +30,7 @@
                                 <label class="form-check-label me-1">@UUZSRep["GLOBAL_NUMBER"] <input type="checkbox" class="form-check-input ms-2" @bind="IsGlobalNum" /></label>
                                 @if (IsGlobalNum)
                                 {
-                                    <input type="number" class="form-control" @bind="Model.DeviceInfo.CDeviceInfo.GlobNum">
+                                    <input type="number" class="form-control" @bind="Model.DeviceInfo.CDeviceInfo.GlobNum" required>
                                 }
                             </div>
                             @*Координаты GPS*@
@@ -42,7 +42,7 @@
                             @*Приоритет*@
                             <div class="mb-3">
                                 <label class="form-label">@UUZSRep["IDS_STRING_PRIORITY"]</label>
-                                <input type="number" min="1" max="50" class="form-control" @bind="Model.DeviceInfo.CDeviceInfo.Prior">
+                                <input type="number" min="1" max="50" class="form-control" @bind="Model.DeviceInfo.CDeviceInfo.Prior" required>
                             </div>
 
                             <div class="mb-3">
@@ -103,7 +103,7 @@
                             @*Число зон*@
                             <div class="mb-3">
                                 <label class="form-label">@UUZSRep["ZONE_COUNT"]</label>
-                                <input type="number" min="1" max="15" class="form-control" @bind="Model.DeviceInfo.CDeviceInfo.ZoneCount">
+                                <input type="number" min="1" max="15" class="form-control" @bind="Model.DeviceInfo.CDeviceInfo.ZoneCount" required>
                             </div>
                         </div>
                     </div>
@@ -130,11 +130,11 @@
                                 {
                                     @if (item.BaseType == (int)BaseLineType.LINE_TYPE_DIAL_UP)
                                     {
-                                    <input type="text" class="form-control form-control-sm" @bind="item.ConnParam">
+                                    <input type="text" class="form-control form-control-sm" @bind="item.ConnParam" required>
                                     }
                                     else
                                     {
-                                    <select class="form-select form-select-sm" value="@item.ConnParam" @onchange="(e)=>ChangeLine(e, item)">
+                                    <select class="form-select form-select-sm" value="@item.ConnParam" @onchange="(e)=>ChangeLine(e, item)" required>
                                         <option>-----</option>
                                             @foreach (var l in L_List)
                                             {
@@ -160,7 +160,7 @@
                                 {
                                     @if (SelectShedule?.Equals(item) ?? false)
                                     {
-                                    <select class="form-select form-select-sm" @bind="item.LocationID">
+                                    <select class="form-select form-select-sm" @bind="item.LocationID" required>
                                             @if (LocationList != null)
                                             {
                                                 @foreach (var l in LocationList)
@@ -177,7 +177,7 @@
                                 }
                         </td>
                         <td>
-                            <input type="number" min="1" max="50" class="form-control form-control-sm" @bind="item.PriorType">
+                            <input type="number" min="1" max="50" class="form-control form-control-sm" @bind="item.PriorType" required>
                         </td>
                         </Tbody>
                         <TSticky>
@@ -245,14 +245,14 @@
             {
                 <PLoad />
             }
-        </form>
+            <ButtonModal>
+                <CheckP BitPosList="@(new[]{NameBitsPos.Create, NameBitsPos.CreateNoStandart})">
+                    <BSumbit IsProcessing="context" />
+                </CheckP>
+                <BCancel OnClick="CallEvent" />
+            </ButtonModal>
+        </BlazorLibrary.Shared.FormComponent.FormDefault>
     </BodyContent>
-    <ButtonContent>
-        <CheckP BitPosList="@(new[]{NameBitsPos.Create, NameBitsPos.CreateNoStandart})">
-            <BSumbit IsProcessing="IsProcessing" FormId="createdeviceszs" />
-        </CheckP>
-        <BCancel OnClick="CallEvent" />
-    </ButtonContent>
 </ModalDialog>
 
 @if (IsDeleteLine && SelectShedule != null)

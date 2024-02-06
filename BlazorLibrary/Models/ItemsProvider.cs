@@ -1,9 +1,4 @@
-﻿using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
-using SMDataServiceProto.V1;
+﻿using SMDataServiceProto.V1;
 
 namespace BlazorLibrary.Models
 {
@@ -18,8 +13,7 @@ namespace BlazorLibrary.Models
             if (items != null)
             {
                 IsScrollData = true;
-            }
-                
+            }                
         }
 
         public Func<GetItemRequest, ValueTask<IEnumerable<TItem>>>? Items { get; init; }

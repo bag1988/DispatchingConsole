@@ -1,16 +1,19 @@
 ﻿<div @ref="@divGroup" class="form-control" tabindex="-1" @onfocus="SetFocusDiv">
-    <input @ref="_input1" type="text" min="0" max="255" placeholder="xxx" class="ip-address-parts" @bind="Part1" @bind:event="oninput">
+    <input @ref="_input1" type="text" min="0" max="255" placeholder="xxx" class="ip-address-parts" @bind="Part1" @bind:event="oninput" required="@(IsRequired? "required": null)">
     .
-    <input @ref="_input2" type="text" min="0" max="255" placeholder="xxx" class="ip-address-parts" @bind="Part2" @bind:event="oninput">
+    <input @ref="_input2" type="text" min="0" max="255" placeholder="xxx" class="ip-address-parts" @bind="Part2" @bind:event="oninput" required="@(IsRequired? "required": null)">
     .
-    <input @ref="_input3" type="text" min="0" max="255" placeholder="xxx" class="ip-address-parts" @bind="Part3" @bind:event="oninput">
+    <input @ref="_input3" type="text" min="0" max="255" placeholder="xxx" class="ip-address-parts" @bind="Part3" @bind:event="oninput" required="@(IsRequired? "required": null)">
     .
-    <input @ref="_input4" type="text" min="0" max="255" placeholder="xxx" class="ip-address-parts" @bind="Part4" @bind:event="oninput">
+    <input @ref="_input4" type="text" min="0" max="255" placeholder="xxx" class="ip-address-parts" @bind="Part4" @bind:event="oninput" required="@(IsRequired? "required": null)">
 </div>
 
 @code {
     [Parameter]
     public string? Value { get; set; }
+
+    [Parameter]
+    public bool IsRequired { get; set; } = true;
 
     [Parameter]
     public EventCallback<string?> ValueChanged { get; set; }

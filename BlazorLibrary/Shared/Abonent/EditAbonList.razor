@@ -1,7 +1,7 @@
 ﻿
 <ModalDialog Title="@AsoRep["IDS_STRING_MULTI_EDIT"]" ButtonCloseEvent="()=>CallBackOn()">
     <BodyContent>
-        <form id="checksaveabon" @onsubmit="OnSaveChange">
+        <BlazorLibrary.Shared.FormComponent.FormDefault OnSumbit="OnSaveChange">
             @if (Model.Dep != null)
             {
                 <div class="mb-3">
@@ -38,8 +38,8 @@
                 </div>
                 <div class="mb-3">
                     <label class="form-label">@AsoRep["IDS_STRING_AB_PRIOR"]</label>
-                    <input type="number" min=1 max=99 class="form-control" @bind="Model.AbPrior">
-                </div>              
+                    <input type="number" min=1 max=99 class="form-control" @bind="Model.AbPrior" required>
+                </div>
                 <div class="mb-3">
                     <label class="pointer mt-4" @onclick="()=>AddPassword=!AddPassword"><span class="oi oi-@(AddPassword?"minus":"plus")"></span> @AsoRep["IDS_STRING_CREATE_PASSWORD"]</label>
                 </div>
@@ -58,27 +58,25 @@
                     }
                 }
             }
-        </form>
+            <ButtonModal>
+                <CheckP BitPos="NameBitsPos.Create" SystemID="SubsystemType.SUBSYST_ASO">
+                    <BSumbit IsProcessing="context" />
+                    @if (CallbackEvent.HasDelegate)
+                    {
+                        <BCancel OnClick="()=>CallBackOn()" />
+                    }
+                </CheckP>
+            </ButtonModal>
+        </BlazorLibrary.Shared.FormComponent.FormDefault>
     </BodyContent>
-    <ButtonContent>
-        <CheckP BitPos="NameBitsPos.Create">
-            <BSumbit FormId="checksaveabon" />
-            @if (CallbackEvent.HasDelegate)
-            {
-                <BCancel OnClick="()=>CallBackOn()" />
-            }
-        </CheckP>
-    </ButtonContent>
 </ModalDialog>
 
-
-
-<CheckP BitPos="NameBitsPos.Create">
+<CheckP BitPos="NameBitsPos.Create" SystemID="SubsystemType.SUBSYST_ASO">
     @if (IsSave)
     {
         <ModalDialog Title="@AsoRep["IDS_STRING_INFO"]" ButtonCloseEvent="()=>IsSave=false">
             <BodyContent>
-                <form id="setabinfo" @onsubmit="SetAbInfo">
+                <BlazorLibrary.Shared.FormComponent.FormDefault OnSumbit="SetAbInfo">
                     <Cards AddClass="alert-warning" Header="@AsoRep["IDS_STRING_CHANGE_AB_FIELDS"]">
                         <ul>
                             @if (!OldModel.Dep.Equals(Model.Dep))
@@ -107,12 +105,12 @@
                             }
                         </ul>
                     </Cards>
-                </form>
+                    <ButtonModal>
+                        <BSumbit IsProcessing="context" />
+                        <BCancel OnClick="()=>IsSave=false" />
+                    </ButtonModal>
+                </BlazorLibrary.Shared.FormComponent.FormDefault>
             </BodyContent>
-            <ButtonContent>
-                <BSumbit FormId="setabinfo" IsProcessing="IsProcessing" />
-                <BCancel OnClick="()=>IsSave=false" />
-            </ButtonContent>
         </ModalDialog>
     }
 </CheckP>

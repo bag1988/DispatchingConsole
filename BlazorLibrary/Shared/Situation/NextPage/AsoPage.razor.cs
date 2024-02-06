@@ -107,7 +107,7 @@ namespace BlazorLibrary.Shared.Situation.NextPage
 
         private async Task Next()
         {
-            if (SelectItem == null)
+            if (SelectItem == null || IsReadOnly)
                 return;
 
             if (NextAction.HasDelegate)

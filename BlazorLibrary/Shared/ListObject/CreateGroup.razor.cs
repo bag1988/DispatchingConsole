@@ -38,8 +38,6 @@ namespace BlazorLibrary.Shared.ListObject
 
         private bool IsDeleteAnyWay = false;
 
-        bool IsProcessing = false;
-
         private TimeSpan Remained = TimeSpan.FromSeconds(10);
 
         int StaffId = 0;
@@ -66,7 +64,6 @@ namespace BlazorLibrary.Shared.ListObject
         {
             if (Model == null)
                 return;
-            IsProcessing = true;
 
             bool isReturn = false;
 
@@ -167,8 +164,6 @@ namespace BlazorLibrary.Shared.ListObject
 
                 await CallAction();
             }
-
-            IsProcessing = false;
         }
 
         /// <summary>

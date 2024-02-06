@@ -24,5 +24,8 @@ namespace BlazorLibrary.FolderForInherits
 
         [Parameter]
         public bool? IsSticky { get; set; } = true;
+
+        [Parameter]
+        public bool IsMaxHeigth { get; set; } = true;
     }
 }

@@ -17,15 +17,13 @@
                 </Tbody>
             </TableVirtualize>
         }
-    </BodyContent>   
+    </BodyContent>
     <ButtonContent>
-        <div class="d-flex align-items-center">           
-            <BClose OnClick="ActionNext" />
-            @if (SelectItem != null && IsData)
-            {
-                <AudioPlayerStream @ref="player" />
-            }
-        </div>
+        <BClose OnClick="ActionNext" />
+        @if (SelectItem != null && IsData)
+        {
+            <AudioPlayerStream @ref="player" />
+        }
     </ButtonContent>
 </ModalDialog>
 

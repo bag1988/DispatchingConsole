@@ -28,7 +28,7 @@ namespace DispatchingConsole.Server.Controllers
     [ApiVersion("1.0")]
     [Route("api/v{version:apiVersion}/chat/[action]")]
     [AllowAnonymous]
-    public class CommunicationController : ControllerBase
+    public class CommunicationController : ControllerBase, IDisposable
     {
         private readonly ILogger<CommunicationController> _logger;
         readonly HubConnection? _hubConnection;
@@ -132,7 +132,6 @@ namespace DispatchingConsole.Server.Controllers
             return null;
         }
 
-
         [HttpGet]
         public FileResult? DownLoadFile([FromQuery] string fileName)
         {
@@ -153,96 +152,88 @@ namespace DispatchingConsole.Server.Controllers
             return null;
         }
 
-        HttpClient? GetHttpClient(string? authorityUrl)
-        {
-            try
-            {
-                authorityUrl = IpAddressUtilities.GetAuthority(authorityUrl);
-
-                if (!string.IsNullOrEmpty(authorityUrl))
-                {
-                    var absoluteUri = $"https://{authorityUrl}";
-                    var handler = new HttpClientHandler();
-                    handler.ClientCertificateOptions = ClientCertificateOption.Manual;
-                    handler.ServerCertificateCustomValidationCallback =
-                        (httpRequestMessage, cert, cetChain, policyErrors) =>
-                        {
-                            return true;
-                        };
-
-                    var httpClient = new HttpClient(handler);
-                    httpClient.BaseAddress = new Uri(absoluteUri);
-                    return httpClient;
-                }
-            }
-            catch (Exception ex)
-            {
-                _logger.LogError(ex.Message);
-            }
-            return null;
-        }
-
         [HttpPost]
         public async Task<IActionResult> ReplicateFiles(ReplicateFilesRequest request)
         {
             try
             {
-                if (!string.IsNullOrEmpty(request.FileUrl) && request.UserNames?.Length > 0 && request.KeyChatRoom != null && !string.IsNullOrEmpty(request.Message) && !string.IsNullOrEmpty(request.RemoteUrl?.UserName))
+                if (!string.IsNullOrEmpty(request.FileUrl) && request.UserNames?.Length > 0 && request.KeyChatRoom != null && !string.IsNullOrEmpty(request.Message) && !string.IsNullOrEmpty(request.RemoteUrl.UserName))
                 {
-                    Stream? fileStream = null;
-                    var httpClient = GetHttpClient(request.RemoteUrl.AuthorityUrl);
-                    if (httpClient != null)
+
+                    var authorityUrl = IpAddressUtilities.GetAuthority(request.RemoteUrl.AuthorityUrl);
+
+                    if (!string.IsNullOrEmpty(authorityUrl))
                     {
-                        var result = await httpClient.GetAsync($"api/v1/chat/DownLoadFile?fileName={request.FileUrl}");
-                        if (result.IsSuccessStatusCode)
+                        Stream? fileStream = null;
+
+                        var absoluteUri = $"https://{authorityUrl}";
+
+                        var handler = new SocketsHttpHandler
                         {
-                            fileStream = await result.Content.ReadAsStreamAsync();
-                            if (fileStream != null)
+                            SslOptions = new() { RemoteCertificateValidationCallback = delegate { return true; } },
+                            PooledConnectionLifetime = Timeout.InfiniteTimeSpan
+                        };
+
+                        using var httpClient = new HttpClient(handler);
+                        httpClient.BaseAddress = new Uri(absoluteUri);
+                        try
+                        {
+                            var result = await httpClient.GetAsync($"api/v1/chat/DownLoadFile?fileName={request.FileUrl}");
+                            if (result.IsSuccessStatusCode)
                             {
-                                var message = new ChatMessage(request.RemoteUrl.AuthorityUrl, request.RemoteUrl.UserName, request.Message);
-
-                                var firstUser = request.UserNames[0];
-                                var filePath = "";
-                                Regex regexUserName = new(@"[^\w]");
-                                if (!string.IsNullOrEmpty(firstUser))
+                                fileStream = await result.Content.ReadAsStreamAsync();
+                                if (fileStream != null)
                                 {
-                                    filePath = Path.Combine(regexUserName.Replace(Convert.ToBase64String(Encoding.UTF8.GetBytes(firstUser)), ""), $"{request.KeyChatRoom}");
-                                }
-                                filePath = Path.Combine(filePath, Path.ChangeExtension(Path.GetRandomFileName(), Path.GetExtension(request.FileUrl)));
+                                    var message = new ChatMessage(request.RemoteUrl.AuthorityUrl, request.RemoteUrl.UserName, request.Message);
 
-                                var writePath = Path.Combine(DirectoryTmp, filePath);
-
-                                var dir = Path.GetDirectoryName(writePath);
-                                if (!string.IsNullOrEmpty(dir))
-                                {
-                                    if (!Directory.Exists(dir))
+                                    var firstUser = request.UserNames[0];
+                                    var filePath = "";
+                                    Regex regexUserName = new(@"[^\w]");
+                                    if (!string.IsNullOrEmpty(firstUser))
                                     {
-                                        Directory.CreateDirectory(dir);
+                                        filePath = Path.Combine(regexUserName.Replace(Convert.ToBase64String(Encoding.UTF8.GetBytes(firstUser)), ""), $"{request.KeyChatRoom}");
                                     }
-                                    if (!System.IO.File.Exists(writePath))
+                                    filePath = Path.Combine(filePath, Path.ChangeExtension(Path.GetRandomFileName(), Path.GetExtension(request.FileUrl)));
+
+                                    var writePath = Path.Combine(DirectoryTmp, filePath);
+
+                                    var dir = Path.GetDirectoryName(writePath);
+                                    if (!string.IsNullOrEmpty(dir))
                                     {
-                                        using (var fs = new FileStream(writePath, FileMode.Create, FileAccess.Write, FileShare.Read))
+                                        if (!Directory.Exists(dir))
                                         {
-                                            var readCount = 0;
-                                            byte[] buffer = new byte[1024 * 10];
-                                            while ((readCount = await fileStream.ReadAsync(buffer)) > 0)
-                                            {
-                                                await fs.WriteAsync(buffer.Take(readCount).ToArray());
-                                            }
+                                            Directory.CreateDirectory(dir);
                                         }
-                                        await fileStream.DisposeAsync();
-                                        httpClient.Dispose();
-                                        message.Url = filePath;
-                                        await SendHubConnect("AddMessageForUser", [IpAddressUtilities.GetAuthority(Request.Host.Value), firstUser, request.KeyChatRoom, message]);
-                                    }
-                                    var otherUser = request.UserNames.Skip(1);
-                                    if (otherUser?.Any() ?? false)
-                                    {
-                                        await SendHubConnect("ReplicateFiles", [otherUser, request.KeyChatRoom, IpAddressUtilities.GetAuthority(Request.Host.Value), message]);
+                                        if (!System.IO.File.Exists(writePath))
+                                        {
+                                            using (var fs = new FileStream(writePath, FileMode.Create, FileAccess.Write, FileShare.Read))
+                                            {
+                                                var readCount = 0;
+                                                byte[] buffer = new byte[1024 * 10];
+                                                while ((readCount = await fileStream.ReadAsync(buffer)) > 0)
+                                                {
+                                                    await fs.WriteAsync(buffer.Take(readCount).ToArray());
+                                                }
+                                            }
+                                            await fileStream.DisposeAsync();
+                                            httpClient.Dispose();
+                                            message.Url = filePath;
+                                            await SendHubConnect("AddMessageForUser", [IpAddressUtilities.GetAuthority(Request.Host.Value), firstUser, request.KeyChatRoom, message]);
+                                        }
+                                        var otherUser = request.UserNames.Skip(1);
+                                        if (otherUser?.Any() ?? false)
+                                        {
+                                            await SendHubConnect("ReplicateFiles", [otherUser, request.KeyChatRoom, IpAddressUtilities.GetAuthority(Request.Host.Value), message]);
+                                        }
                                     }
                                 }
                             }
                         }
+                        catch (Exception ex)
+                        {
+                            _logger.WriteLogError(ex, $"{Request.RouteValues["action"]?.ToString()} for {absoluteUri}");
+                        }
+                        httpClient.Dispose();
                     }
                 }
                 return Ok();
@@ -253,7 +244,6 @@ namespace DispatchingConsole.Server.Controllers
                 return ex.GetResultStatusCode();
             }
         }
-
 
         [HttpPost]
         public async Task<IActionResult> GetLocalContact()
@@ -277,7 +267,6 @@ namespace DispatchingConsole.Server.Controllers
                 return ex.GetResultStatusCode();
             }
         }
-
 
         [HttpPost]
         public async Task<IActionResult> CreateChatRoom([FromBody] JoinModel model)
@@ -477,6 +466,15 @@ namespace DispatchingConsole.Server.Controllers
             {
                 _logger.WriteLogError(ex, Request.RouteValues["action"]?.ToString());
                 return ex.GetResultStatusCode();
+            }
+        }
+
+        public void Dispose()
+        {
+            if (_hubConnection != null)
+            {
+                _hubConnection.StopAsync().Wait();
+                _hubConnection.DisposeAsync();
             }
         }
     }

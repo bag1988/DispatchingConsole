@@ -17,6 +17,7 @@ using static SMDataServiceProto.V1.SMDataService;
 using SensorM.GsoCommon.ServerLibrary.Utilities;
 using SensorM.GsoCore.SharedLibrary;
 using Asp.Versioning;
+using SensorM.GsoCommon.ServerLibrary;
 
 namespace ServerLibrary.Controllers
 {
@@ -33,8 +34,9 @@ namespace ServerLibrary.Controllers
         private readonly WriteLog _Log;
         private readonly IConfiguration _conf;
         private readonly UsersToken _tokens;
+        private readonly CheckingIpResolution _checkingIpResolution;
 
-        public AuthorizeController(ILogger<AuthorizeController> logger, SMSSGsoClient data, WriteLog log, AuthorizedInfo userInfo, IConfiguration conf, SMDataServiceClient sMData, UsersToken tokens)
+        public AuthorizeController(ILogger<AuthorizeController> logger, SMSSGsoClient data, WriteLog log, AuthorizedInfo userInfo, IConfiguration conf, SMDataServiceClient sMData, UsersToken tokens, CheckingIpResolution checkingIpResolution)
         {
             _logger = logger;
             _SMGso = data;
@@ -43,6 +45,7 @@ namespace ServerLibrary.Controllers
             _conf = conf;
             _SMData = sMData;
             _tokens = tokens;
+            _checkingIpResolution = checkingIpResolution;
         }
 
         async Task<IActionResult> BeginUserSess(RequestLogin request)
@@ -61,30 +64,9 @@ namespace ServerLibrary.Controllers
                     UserName = request.User,
                     Error = ErrorLoginUser.NoAccess
                 };
-
-                var r = new Regex("(\\d{1,3}).(\\d{1,3}).(\\d{1,3}).(\\d{1,3})");
-
-                var localIp = r.Match(HttpContext.Connection.LocalIpAddress?.ToString() ?? "").Groups.Values.Select(x => x.Value);
-
-                var remoteIp = r.Match(HttpContext.Connection.RemoteIpAddress?.ToString() ?? "").Groups.Values.Select(x => x.Value);
-
-                var listIP = await _SMData.GetServerIPAddressesAsync(new Google.Protobuf.WellKnownTypes.Empty());
-
-                _logger.LogInformation(@"Вход по адресу {local}, с Ip-адреса {remote}, адреса в настройках {ipList}", HttpContext.Connection.LocalIpAddress?.ToString(), HttpContext.Connection.RemoteIpAddress?.ToString(), listIP?.Array);
-
-                bool isAccessBegin = false;
-                if ((listIP?.Array.Select(x => IpAddressUtilities.GetHost(x)).Contains(remoteIp.FirstOrDefault()) ?? false) || remoteIp.FirstOrDefault() == localIp.FirstOrDefault() || remoteIp.Skip(1).Take(3).SequenceEqual(localIp.Skip(1).Take(3)))
-                {
-                    isAccessBegin = true;
-                }
-                else
-                {
-                    var checkAccess = await _SMGso.IsContenIpInArmWhiteListByParamsAsync(new SMDataServiceProto.V1.String() { Value = remoteIp.FirstOrDefault() });
-                    isAccessBegin = checkAccess?.Value ?? false;
-
-                    _logger.LogInformation(@"Доступ для Ip-адреса {remote} {Access}", remoteIp.FirstOrDefault(), (isAccessBegin ? "разрешен" : "запрещен"));
-                }
-
+                               
+                bool isAccessBegin = await _checkingIpResolution.CheckWhiteList();
+                
                 if (isAccessBegin)
                 {
                     user = await _SMGso.BeginUserSessAsync(request, cancellationToken: HttpContext.RequestAborted);

@@ -1,13 +1,12 @@
 ﻿@typeparam TItem
 @inherits TableParams<TItem>
-
-<div @ref="div" @onscroll="OnScroll" class="table-scroll-v table-responsive" style="max-height:@(WindowHeight)px;">
+<DivScroll Devision="@Devision" IsMaxHeigth="@IsMaxHeigth" IsSticky="@IsSticky">
     <table class="table table-hover table-bordered" style="min-width: @(MinWidth)px;">
         <thead class="table-dark @(IsSticky==true? "position-sticky":"") top-0" style="z-index:2;">
             <tr>
                 @Thead
             </tr>
-        </thead>        
+        </thead>
         <tbody @ref="Elem" tabindex="0" @onkeydown="KeySet" @onkeydown:preventDefault="_shouldPreventDefault">
             @if (Items != null)
             {
@@ -44,6 +43,7 @@
             </tfoot>
         }
     </table>
-</div>
+</DivScroll>
+
 
 

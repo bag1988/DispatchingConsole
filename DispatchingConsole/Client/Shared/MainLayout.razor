@@ -3,11 +3,12 @@
 @using SharedLibrary.Models;
 @using DispatchingConsole.Client.WebRTC;
 @using SharedLibrary.Utilities;
+@inject ILogger<MainLayout> _logger
 @inherits LayoutComponentBase
 
 <Main Title="@DispRep["PODS"]" Width="300">
     <Menu>
-        <video class="m-2 d-none" id="localVideo" for="@($"{IpAddressUtilities.GetAuthority(MyNavigationManager.BaseUri)}-{UserName}")" muted autoplay poster="/sound.svg?v=1"></video>
+        <video class="m-2 d-none" id="localVideo" for="@($"{IpAddressUtilities.GetAuthority(_webRtc.MyAuthorityUrl)}-{UserName}")" muted autoplay poster="/sound.svg?v=1"></video>
         <DivNavLink>
             <div class="d-flex">
                 @if (IsCreateConnect)
@@ -33,29 +34,31 @@
             @if (IsCreateConnect)
             {
                 <h5 class="mt-2 text-center">Создать чат</h5>
-                <form id="createconnect" @onsubmit="CreateConnect">
+                <BlazorLibrary.Shared.FormComponent.FormDefault OnSumbit="CreateConnect">
                     <div class="d-flex">
-                        <InputFocus required placeholder="@GsoRep["IDS_STRING_NAME"]" @bind-Value="NewConnectName" />
+                        <InputFocus placeholder="@GsoRep["IDS_STRING_NAME"]" @bind-Value="NewConnectName" maxlength="255" required />
                     </div>
-                </form>
-                <ResultView TItem="ContactInfo" Items="GetCuInfoList" SelectList="@SelectList" SetSelectList="SetSelectList" ClassItems="d-flex my-1 px-2 py-1">
-                    <ChildContent Context="item">
-                        <text class="pointer">@($"{item.Name} - {item.UserName}")</text>
-                        @if (item.IsActive)
-                        {
-                            <span class="oi oi-media-record text-warning ms-1" title="online" style="font-size: 0.6em;"></span>
-                        }
-                        @if (SelectList?.LastOrDefault() == item && item.Type == TypeContact.Manual)
-                        {
-                            <span class="oi oi-trash text-danger ms-auto my-auto pointer" title="@GsoRep["IDS_STRING_DELETE"]" @onclick="DeleteUser"></span>
-                        }
-                    </ChildContent>
-                </ResultView>
-                <HR />
-                <div class="d-flex">
-                    <BSumbit AddClass="m-1 flex-fill" FormId="createconnect" />
-                    <BSecondary AddClass="m-1 flex-fill" Text="@DispRep["ADD_CU"]" OnClick="()=>IsAdd=true" />
-                </div>
+                    <ResultView TItem="ContactInfo" Items="GetCuInfoList" SelectList="@SelectList" SetSelectList="SetSelectList" ClassItems="d-flex my-1 px-2 py-1">
+                        <ChildContent Context="item">
+                            <text class="pointer">@($"{item.Name} - {item.UserName}")</text>
+                            @if (item.IsActive)
+                            {
+                                <span class="oi oi-media-record text-warning ms-1" title="online" style="font-size: 0.6em;"></span>
+                            }
+                            @if (SelectList?.LastOrDefault() == item && item.Type == TypeContact.Manual)
+                            {
+                                <span class="oi oi-trash text-danger ms-auto my-auto pointer" title="@GsoRep["IDS_STRING_DELETE"]" @onclick="DeleteUser"></span>
+                            }
+                        </ChildContent>
+                    </ResultView>
+                    <HR />
+                    <div class="d-flex">
+                        <BSumbit AddClass="m-1 flex-fill" IsProcessing="context" />
+                        <BSecondary AddClass="m-1 flex-fill" Text="@DispRep["ADD_CU"]" OnClick="()=>IsAdd=true" />
+                    </div>
+                </BlazorLibrary.Shared.FormComponent.FormDefault>
+
+
             }
             else
             {
@@ -109,19 +112,19 @@
 {
     <ModalDialog Title="@DispRep["EDIT_NAME"]" ButtonCloseEvent="CloseEditConnect">
         <BodyContent>
-            <form id="editconnect" @onsubmit="SaveNewNameConnect">
+            <BlazorLibrary.Shared.FormComponent.FormDefault OnSumbit="SaveNewNameConnect">
                 @*Наименование*@
                 <div class="mb-3">
                     <label class="form-label">@GsoRep["IDS_STRING_NAME"]</label>
-                    <InputFocus @bind-Value="NewConnectName" />
+                    <InputFocus @bind-Value="NewConnectName" maxlength="255" required />
                 </div>
-            </form>
-
+                <ButtonModal>
+                    <BSumbit IsProcessing="context" />
+                    <BCancel OnClick="CloseEditConnect" />
+                </ButtonModal>
+            </BlazorLibrary.Shared.FormComponent.FormDefault>
         </BodyContent>
-        <ButtonContent>
-            <BSumbit FormId="editconnect" />
-            <BCancel OnClick="CloseEditConnect" />
-        </ButtonContent>
+
     </ModalDialog>
 }
 
@@ -129,16 +132,16 @@
 {
     <ModalDialog Title="@DispRep["ADD_CU"]" ButtonCloseEvent="CloseAddUser">
         <BodyContent>
-            <form id="createendpoint" @onsubmit="AddConnectInfo">
+            <BlazorLibrary.Shared.FormComponent.FormDefault OnSumbit="AddConnectInfo">
                 @*Наименование*@
                 <div class="mb-3">
                     <label class="form-label">@GsoRep["IDS_STRING_NAME"]</label>
-                    <InputFocus pattern="^.{2,40}$" @bind-Value="NewName" />
+                    <InputFocus pattern="^.{2,40}$" @bind-Value="NewName" maxlength="255" required />
                 </div>
                 @*Пользователь*@
                 <div class="mb-3">
                     <label class="form-label">@DispRep["USER"]</label>
-                    <input pattern="^.{2,40}$" class="form-control" @bind="@NewUser">
+                    <input pattern="^.{2,40}$" class="form-control" @bind="@NewUser" required>
                 </div>
                 @*Ip адрес*@
                 <div class="mb-3">
@@ -146,15 +149,14 @@
                     <div class="d-flex align-items-center">
                         <InputIpAddressOneFiled @bind-Value="NewIp" />
                         <b>:</b>
-                        <input type="number" class="form-control w-25" max="99999" @bind="NewPort" />
+                        <input type="number" class="form-control w-25" max="99999" @bind="NewPort" required />
                     </div>
                 </div>
-
-            </form>
+                <ButtonModal>
+                    <BSumbit IsProcessing="context" />
+                    <BCancel OnClick="CloseAddUser" />
+                </ButtonModal>
+            </BlazorLibrary.Shared.FormComponent.FormDefault>
         </BodyContent>
-        <ButtonContent>
-            <BSumbit FormId="createendpoint" />
-            <BCancel OnClick="CloseAddUser" />
-        </ButtonContent>
     </ModalDialog>
 }

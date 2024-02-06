@@ -8,23 +8,20 @@ using SharedLibrary;
 using SMDataServiceProto.V1;
 using static BlazorLibrary.Shared.Main;
 using SharedLibrary.Interfaces;
-using Google.Protobuf.WellKnownTypes;
-using Label.V1;
-using System.Diagnostics.Metrics;
 using AsoDataProto.V1;
+using BlazorLibrary.Helpers;
 
 namespace BlazorLibrary.Shared.ListObject
 {
     partial class CreateList : IAsyncDisposable, IPubSubMethod
     {
-        [CascadingParameter]
-        public int SubsystemID { get; set; } = SubsystemType.SUBSYST_ASO;
-
         [Parameter]
         public EventCallback CallbackEvent { get; set; }
 
         [Parameter]
         public int? ListId { get; set; }
+
+        int SystemId => ParseUrlSegments.GetSystemId(MyNavigationManager.Uri);
 
         private string? TitleName { get; set; }
 
@@ -41,14 +38,12 @@ namespace BlazorLibrary.Shared.ListObject
 
         bool IsPageLoad = true;
 
-        bool IsProcessing = false;
-
         protected override async Task OnInitializedAsync()
         {
             StaffId = await _User.GetLocalStaff();
-            if (SubsystemID == SubsystemType.SUBSYST_ASO)
+            if (SystemId == SubsystemType.SUBSYST_ASO)
                 TitleName = GsoRep["IDS_STRING_CREATE_AB_LIST"];
-            else if (SubsystemID == SubsystemType.SUBSYST_SZS)
+            else if (SystemId == SubsystemType.SUBSYST_SZS)
                 TitleName = GsoRep["IDS_STRING_CREATE_DEVICE_LIST"];
 
             await LoadList();
@@ -69,7 +64,7 @@ namespace BlazorLibrary.Shared.ListObject
         {
             try
             {
-                if (SubsystemID == SubsystemType.SUBSYST_ASO)
+                if (SystemId == SubsystemType.SUBSYST_ASO)
                 {
                     var newItem = AbonentItem.Parser.ParseFrom(AbonentItemByte);
 
@@ -92,7 +87,7 @@ namespace BlazorLibrary.Shared.ListObject
         {
             try
             {
-                if (SubsystemID == SubsystemType.SUBSYST_ASO)
+                if (SystemId == SubsystemType.SUBSYST_ASO)
                 {
                     var newItem = AbonentItem.Parser.ParseFrom(AbonentItemByte);
 
@@ -121,7 +116,7 @@ namespace BlazorLibrary.Shared.ListObject
                 {
                     var newItem = ListItem.Parser.ParseFrom(value);
 
-                    if (newItem != null && newItem.List.SubsystemID == SubsystemID)
+                    if (newItem != null && newItem.List.SubsystemID == SystemId)
                     {
                         if (string.IsNullOrEmpty(newItem.Name) && string.IsNullOrEmpty(newItem.Comm) && newItem.Priority == 0)
                         {
@@ -160,7 +155,7 @@ namespace BlazorLibrary.Shared.ListObject
                 {
                     var newItem = ListItem.Parser.ParseFrom(value);
 
-                    if (newItem != null && newItem.List.SubsystemID == SubsystemID)
+                    if (newItem != null && newItem.List.SubsystemID == SystemId)
                     {
                         SelectFolders?.ForEach(x =>
                         {
@@ -198,7 +193,7 @@ namespace BlazorLibrary.Shared.ListObject
         {
             try
             {
-                if (SubsystemID == SubsystemType.SUBSYST_SZS)
+                if (SystemId == SubsystemType.SUBSYST_SZS)
                 {
                     await GetDeviceTypes();
                     StateHasChanged();
@@ -214,12 +209,12 @@ namespace BlazorLibrary.Shared.ListObject
         {
             await GetListFolder();
 
-            if (SubsystemID == SubsystemType.SUBSYST_ASO)
+            if (SystemId == SubsystemType.SUBSYST_ASO)
             {
                 await GetListDepFolder();
                 await GetListABC();
             }
-            else if (SubsystemID == SubsystemType.SUBSYST_SZS)
+            else if (SystemId == SubsystemType.SUBSYST_SZS)
             {
                 await GetDeviceTypes();
             }
@@ -229,7 +224,7 @@ namespace BlazorLibrary.Shared.ListObject
         {
             if (ListId != null)
             {
-                var result = await Http.PostAsJsonAsync("api/v1/GetListInfo", new OBJ_ID() { ObjID = ListId.Value, StaffID = StaffId, SubsystemID = SubsystemID });
+                var result = await Http.PostAsJsonAsync("api/v1/GetListInfo", new OBJ_ID() { ObjID = ListId.Value, StaffID = StaffId, SubsystemID = SystemId });
                 if (result.IsSuccessStatusCode)
                 {
                     var re = await result.Content.ReadFromJsonAsync<GetListInfoResponse>();
@@ -258,7 +253,7 @@ namespace BlazorLibrary.Shared.ListObject
                     {
                         if (GroupType.Key == 0)
                         {
-                            if (SubsystemID == SubsystemType.SUBSYST_ASO)
+                            if (SystemId == SubsystemType.SUBSYST_ASO)
                             {
                                 foreach (var item in GroupType.GroupBy(x => x.Name.Substring(0, 1)))
                                 {
@@ -322,7 +317,7 @@ namespace BlazorLibrary.Shared.ListObject
                 {
                     ListID = ListId ?? 0,
                     ListStaffID = StaffId,
-                    ListSubsystemID = SubsystemID,
+                    ListSubsystemID = SystemId,
                     AsoAbonID = x.AsoAbonID,
                     AsoAbonStaffID = x.AsoAbonStaffID,
                     SZSDevID = x.SZSDevID,
@@ -333,7 +328,6 @@ namespace BlazorLibrary.Shared.ListObject
 
         private async Task AddList()
         {
-            IsProcessing = true;
             if (string.IsNullOrEmpty(ListModel.Name))
             {
                 MessageView?.AddError(GsoRep["IDS_CREATENOLIST"], AsoRep["IDS_E_NOLISTNAME"]);
@@ -345,7 +339,7 @@ namespace BlazorLibrary.Shared.ListObject
             else if (SelectFolders?.Count > 0)
             {
                 if (ListModel.OBJID == null)
-                    ListModel.OBJID = new OBJ_ID() { StaffID = StaffId, SubsystemID = SubsystemID };
+                    ListModel.OBJID = new OBJ_ID() { StaffID = StaffId, SubsystemID = SystemId };
 
                 UpdateList request = new();
                 request.Info = new SMSSGsoProto.V1.CListInfo() { Name = ListModel.Name, ListID = ListModel.OBJID.ObjID, ListStaffID = ListModel.OBJID.StaffID, ListSubsystemID = ListModel.OBJID.SubsystemID, Comm = ListModel.Comm, Priority = ListModel.Type };
@@ -363,7 +357,7 @@ namespace BlazorLibrary.Shared.ListObject
                 {
                     ListID = ListId ?? 0,
                     ListStaffID = StaffId,
-                    ListSubsystemID = SubsystemID,
+                    ListSubsystemID = SystemId,
                     AsoAbonID = x.AsoAbonID,
                     AsoAbonStaffID = x.AsoAbonStaffID,
                     SZSDevID = x.SZSDevID,
@@ -387,9 +381,6 @@ namespace BlazorLibrary.Shared.ListObject
             {
                 MessageView?.AddError(GsoRep["IDS_CREATENOLIST"], GsoRep["IDS_STRING_ABS"] + " " + GsoRep["IDS_STRING_FOR_LIST_NOT_SELECTED"]);
             }
-
-            IsProcessing = false;
-
         }
 
         private async Task GoCallBack()
@@ -444,7 +435,7 @@ namespace BlazorLibrary.Shared.ListObject
                                 {
                                     ObjID = x.ObjectParam?.ObjectInfo?.ObjID ?? 0,
                                     StaffID = StaffId,
-                                    SubsystemID = SubsystemID
+                                    SubsystemID = SystemId
                                 },
                                 Type = ListType.MEN
                             });
@@ -468,7 +459,7 @@ namespace BlazorLibrary.Shared.ListObject
 
         private async Task GetListFolder()
         {
-            var result = await Http.PostAsJsonAsync("api/v1/GetObjects_IList", new OBJ_ID() { StaffID = StaffId, SubsystemID = SubsystemID });
+            var result = await Http.PostAsJsonAsync("api/v1/GetObjects_IList", new OBJ_ID() { StaffID = StaffId, SubsystemID = SystemId });
             if (result.IsSuccessStatusCode)
             {
                 var re = await result.Content.ReadFromJsonAsync<List<Objects>>();
@@ -506,7 +497,7 @@ namespace BlazorLibrary.Shared.ListObject
                     var re = await result.Content.ReadFromJsonAsync<List<string>>();
                     if (re != null)
                     {
-                        var newData = re.Select(x => new Objects() { Name = x, OBJID = new OBJ_ID() { ObjID = re.IndexOf(x), StaffID = StaffId, SubsystemID = SubsystemID }, Type = ListType.MAN });
+                        var newData = re.Select(x => new Objects() { Name = x, OBJID = new OBJ_ID() { ObjID = re.IndexOf(x), StaffID = StaffId, SubsystemID = SystemId }, Type = ListType.MAN });
                         if (Folders == null)
                             Folders = new();
                         lock (Folders)
@@ -535,7 +526,7 @@ namespace BlazorLibrary.Shared.ListObject
             {
                 if (ListId == null)
                 {
-                    return SubsystemID switch
+                    return SystemId switch
                     {
                         SubsystemType.SUBSYST_SZS => GsoRep["IDS_STRING_CREATE_DEVICE_LIST"],
                         _ => GsoRep["IDS_STRING_CREATE_AB_LIST"]

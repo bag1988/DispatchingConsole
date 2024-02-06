@@ -1,7 +1,7 @@
 ﻿@using SMDataServiceProto.V1;
 @using FiltersGSOProto.V1;
 @inherits FiltrInherits<GetItemsINotifySessFilter>
-<CheckP BitPos="NameBitsPos.ViewArhive">
+<CheckP BitPos="NameBitsPos.ViewArhive" SystemID="SubsystemType.SUBSYST_SZS">
     @if (!IsPageLoad)
     {
         <FiltrInput AddItemFiltr="AddItemFiltr" RemoveItemsFiltr="RemoveItemsFiltr" Items="FiltrItems" Hints="HintItems" PlaceHolder="@PlaceHolder" />
@@ -17,7 +17,7 @@
             <td>@item.TCount</td>
             </Tbody>
             <TSticky>
-                <CheckP BitPos="4">
+                <CheckP BitPos="NameBitsPos.ViewObject" SystemID="SubsystemType.SUBSYST_SZS">
                     <BPrint OnClick="GetReport" />
                 </CheckP>
             </TSticky>

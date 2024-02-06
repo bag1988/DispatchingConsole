@@ -1,4 +1,5 @@
-﻿@if (BitPos != null)
+﻿@using BlazorLibrary.Helpers
+@if (BitPos != null)
 {
     @if (CheckPermission.CheckBitPos(PerSub, BitPos))
     {
@@ -28,8 +29,7 @@ else if (BitPosList != null)
     [Parameter]
     public int? SystemID { get; set; }
 
-    [CascadingParameter]
-    public int SubsystemId { get; set; } = 1;
+    int SystemId => ParseUrlSegments.GetSystemId(MyNavigationManager.Uri);
 
     private byte[]? PerSub = null;
 
@@ -37,7 +37,7 @@ else if (BitPosList != null)
     {
         Permisions = await _User.GetAuthPerm();
         if (SystemID == null)
-            SystemID = SubsystemId;
+            SystemID = SystemId;
         switch (SystemID)
         {
             case SubsystemType.SUBSYST_ASO: PerSub = Permisions.PerAccAso; break;

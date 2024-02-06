@@ -10,6 +10,7 @@ using SMDataServiceProto.V1;
 using static BlazorLibrary.Shared.Main;
 using SharedLibrary.Interfaces;
 using LibraryProto.DerivedModels;
+using Microsoft.Extensions.Logging;
 
 namespace BlazorLibrary.Shared.Situation.NextPage
 {
@@ -80,8 +81,6 @@ namespace BlazorLibrary.Shared.Situation.NextPage
         bool IsAllMsg = false;
 
         private bool IsNext = false;
-
-        bool IsProcessing = false;
 
         private List<CCmdInfo>? m_CmdList { get; set; }
 
@@ -578,8 +577,11 @@ namespace BlazorLibrary.Shared.Situation.NextPage
 
         private async Task Next()
         {
-            IsProcessing = true;
-            if (IsIndividualMode == true)
+            if (IsCreatePrd)
+            {
+                await SavePrd();
+            }
+            else if (IsIndividualMode == true)
             {
                 if (SzsList != null && !ZoneList.Any())
                 {
@@ -607,7 +609,6 @@ namespace BlazorLibrary.Shared.Situation.NextPage
             {
                 await SaveSzs();
             }
-            IsProcessing = false;
         }
 
         private async Task Cancel()
@@ -660,83 +661,86 @@ namespace BlazorLibrary.Shared.Situation.NextPage
         }
 
         private async Task SaveSzs()
-        {
+        {            
+            try
+            {
+                var CmdID = await GetCmdID();
+                if (CmdID != 0)
+                {
+                    if (await CheckParams())
+                    {
+                        if (ItemFirst.CmdID == 0)
+                        {
+                            ItemFirst.CmdID = CmdID;
+                            ItemFirst.CmdSubsystemID = SubsystemType.SUBSYST_SZS;
+                        }
+
+                        if (SzsList != null)
+                        {
+                            SzsList.ForEach(x =>
+                            {
+                                TimeOnly msgLength = new(0, (Bits.HIWORD(x.CmdParam) / 20) / 60, (Bits.HIWORD(x.CmdParam) / 20) % 60);
+                                var param1 = x.Param1;
+                                x.CmdID = ItemFirst.CmdID;
+                                x.CmdSubsystemID = ItemFirst.CmdSubsystemID;
+                                x.CmdParam = ItemFirst.CmdParam;
+                                x.Param1 = ItemFirst.Param1;
+                                if (IsIndividualMode == false)
+                                {
+                                    x.MsgID = ItemFirst.MsgID;
+                                    x.MsgStaffID = ItemFirst.MsgStaffID;
+                                    x.Param2 = ItemFirst.Param2;
+                                }
+                                else
+                                {
+
+                                    var w = Bits.LOWORD(param1);
+                                    uint u = (uint)x.Param1;
+                                    u &= 0xFFFF0000;
+                                    u |= (uint)w;
+                                    x.Param1 = (int)u;
+
+                                    if (x.MsgID > 0)
+                                    {
+                                        x.Param1 = Bits.SET_BIT(x.Param1, 18);
+                                        x.CmdParam = Bits.MAKELONG(Bits.LOWORD(x.CmdParam), (msgLength.Minute * 60 + msgLength.Second) * 20);
+                                    }
+                                    else
+                                    {
+                                        x.Param1 = Bits.RESET_BIT(x.Param1, 18);
+                                        x.MsgStaffID = 0;
+                                    }
+                                }
+                            });
+
+                            ObjectList?.ForEach(x =>
+                            {
+                                if (x.DevType != SubsystemType.SUBSYST_PRD)
+                                {
+                                    var elem = SzsList.FirstOrDefault(s => s.SZSDevID == x.SZSDevID && s.SZSDevStaffID == x.SZSDevStaffID && s.SZSGroupID == x.SZSGroupID && s.SZSGroupStaffID == x.SZSGroupStaffID);
+                                    if (elem != null)
+                                    {
+                                        x.CmdID = elem.CmdID;
+                                        x.CmdParam = elem.CmdParam;
+                                        x.MsgID = elem.MsgID;
+                                        x.MsgStaffID = elem.MsgStaffID;
+                                        x.CmdSubsystemID = elem.CmdSubsystemID;
+                                        x.Param1 = elem.Param1;
+                                        x.Param2 = elem.Param2;
+                                        x.ZoneCount = elem.ZoneCount;
+                                    }
+                                }
+                            });
+                        }
+                        await SaveSit(ObjectList);
+                    }                   
+                }                
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex.Message);
+            }
             IsNext = false;
-
-            var CmdID = await GetCmdID();
-            if (CmdID == 0)
-                return;
-
-            if (!(await CheckParams()))
-                return;
-
-            if (ItemFirst.CmdID == 0)
-            {
-                ItemFirst.CmdID = CmdID;
-                ItemFirst.CmdSubsystemID = SubsystemType.SUBSYST_SZS;
-            }
-
-            if (SzsList != null)
-            {
-                SzsList.ForEach(x =>
-                {
-                    TimeOnly msgLength = new(0, (Bits.HIWORD(x.CmdParam) / 20) / 60, (Bits.HIWORD(x.CmdParam) / 20) % 60);
-                    var param1 = x.Param1;
-                    x.CmdID = ItemFirst.CmdID;
-                    x.CmdSubsystemID = ItemFirst.CmdSubsystemID;
-                    x.CmdParam = ItemFirst.CmdParam;
-                    x.Param1 = ItemFirst.Param1;
-                    if (IsIndividualMode == false)
-                    {
-                        x.MsgID = ItemFirst.MsgID;
-                        x.MsgStaffID = ItemFirst.MsgStaffID;
-                        x.Param2 = ItemFirst.Param2;
-                    }
-                    else
-                    {
-
-                        var w = Bits.LOWORD(param1);
-                        uint u = (uint)x.Param1;
-                        u &= 0xFFFF0000;
-                        u |= (uint)w;
-                        x.Param1 = (int)u;
-
-                        if (x.MsgID > 0)
-                        {
-                            x.Param1 = Bits.SET_BIT(x.Param1, 18);
-                            x.CmdParam = Bits.MAKELONG(Bits.LOWORD(x.CmdParam), (msgLength.Minute * 60 + msgLength.Second) * 20);
-                        }
-                        else
-                        {
-                            x.Param1 = Bits.RESET_BIT(x.Param1, 18);
-                            x.MsgStaffID = 0;
-                        }
-                    }
-                });
-
-                ObjectList?.ForEach(x =>
-                {
-                    if (x.DevType != SubsystemType.SUBSYST_PRD)
-                    {
-                        var elem = SzsList.FirstOrDefault(s => s.SZSDevID == x.SZSDevID && s.SZSDevStaffID == x.SZSDevStaffID && s.SZSGroupID == x.SZSGroupID && s.SZSGroupStaffID == x.SZSGroupStaffID);
-                        if (elem != null)
-                        {
-                            x.CmdID = elem.CmdID;
-                            x.CmdParam = elem.CmdParam;
-                            x.MsgID = elem.MsgID;
-                            x.MsgStaffID = elem.MsgStaffID;
-                            x.CmdSubsystemID = elem.CmdSubsystemID;
-                            x.Param1 = elem.Param1;
-                            x.Param2 = elem.Param2;
-                            x.ZoneCount = elem.ZoneCount;
-                        }
-                    }
-                });
-            }
-
-            await SaveSit(ObjectList);
-
-
         }
 
         bool IsViewMessage

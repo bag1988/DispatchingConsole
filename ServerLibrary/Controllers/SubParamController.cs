@@ -72,7 +72,7 @@ namespace ServerLibrary.Controllers
                 var request = JsonParser.Default.Parse<SetSndSettingExRequest>(json);
 
                 r = await _SMData.SetSndSettingExAsync(request);
-                await _Log.Write(Source: request.OBJID?.SubsystemID == SubsystemType.SUBSYST_P16x ? (int)GSOModules.P16Forms_Module : (int)GSOModules.GsoForms_Module, EventCode: (int)GsoEnum.IDS_REG_PARAM_UPDATE, SubsystemID: _userInfo.GetInfo?.SubSystemID, UserID: _userInfo.GetInfo?.UserID);
+                await _Log.Write(Source: request.OBJID?.SubsystemID == SubsystemType.SUBSYST_P16x ? (int)GSOModules.P16Forms_Module : (int)GSOModules.GsoForms_Module, EventCode: (int)GsoEnum.IDS_REG_PARAM_UPDATE, SubsystemID: request?.OBJID?.SubsystemID, UserID: _userInfo.GetInfo?.UserID);
             }
             catch (Exception ex)
             {

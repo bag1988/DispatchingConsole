@@ -44,7 +44,6 @@ namespace BlazorLibrary.Shared.DevicesSZS
         private int SheduleID = 1;
 
         private bool IsGlobalNum = false;
-        bool IsProcessing = false;
 
         private bool CheckState = false;
 
@@ -115,7 +114,6 @@ namespace BlazorLibrary.Shared.DevicesSZS
         {
             if (Model?.DeviceInfo?.CDeviceInfo != null)
             {
-                IsProcessing = true;
                 bool IsReturn = false;
                 if (IsGlobalNum && Model.DeviceInfo.CDeviceInfo.GlobNum == 0)
                 {
@@ -185,7 +183,6 @@ namespace BlazorLibrary.Shared.DevicesSZS
 
                 if (IsReturn)
                 {
-                    IsProcessing = false;
                     return;
                 }
 
@@ -223,7 +220,6 @@ namespace BlazorLibrary.Shared.DevicesSZS
                     MessageView?.AddError("", UUZSRep["IDS_ERROR_SETDEVICE"]);
                 }
             }
-            IsProcessing = false;
         }
 
         private async Task SetSubDevice()

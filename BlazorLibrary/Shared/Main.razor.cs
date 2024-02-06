@@ -11,23 +11,21 @@ using SharedLibrary.GlobalEnums;
 using SharedLibrary.Models;
 using SharedLibrary.Utilities;
 using SharedLibrary;
-using SharedLibrary.Extensions;
 using System.ComponentModel;
 using SharedLibrary.Interfaces;
-using System.Threading;
 using System.Web;
-using SMDataServiceProto.V1;
-using SCSChLService.Protocol.Grpc.Proto.V2;
+using Microsoft.Extensions.Logging;
+using Microsoft.AspNetCore.Components.Routing;
 
 namespace BlazorLibrary.Shared
 {
     partial class Main : IAsyncDisposable, IPubSubMethod
     {
         [Parameter]
-        public RenderFragment<int>? ChildContent { get; set; }
+        public RenderFragment? ChildContent { get; set; }
 
         [Parameter]
-        public RenderFragment<int>? Menu { get; set; }
+        public RenderFragment? Menu { get; set; }
 
         [Parameter]
         public string? Title { get; set; }
@@ -37,11 +35,9 @@ namespace BlazorLibrary.Shared
 
         public ConfigStart ConfStart = new();
 
-        public int SubsystemID { get; set; } = 0;
+        int SystemId => ParseUrlSegments.GetSystemId(MyNavigationManager.Uri);
 
         public static MessageViewList? MessageView = default!;
-
-        ElementReference? main;
 
         bool isPageLoad = false;
 
@@ -49,15 +45,18 @@ namespace BlazorLibrary.Shared
 
         protected override async Task OnInitializedAsync()
         {
-            await Task.Yield();
             ConfStart = await GetConfStart();
 
-            await CheckQuery(MyNavigationManager.Uri);
+            CheckSubSystemId();
+
+            await CheckQuery();
+
+            IsLoadRemoteAuth = false;
+            StateHasChanged();
 
             await CheckUser();
 
-            var subId = await _User.GetSubSystemID();
-            await ChangeSubSystem(subId);
+            MyNavigationManager.LocationChanged += MyNavigationManager_LocationChanged;
 
             await JSRuntime.InvokeVoidAsync("HotKeys.ListenWindowKey");
 
@@ -67,10 +66,10 @@ namespace BlazorLibrary.Shared
         [Description(DaprMessage.PubSubName)]
         public Task Fire_RestartUi(string? value)
         {
-            Console.WriteLine("Restart Ui");
+            _logger.LogTrace("Restart Ui");
             if (isPageLoad)
             {
-                MyNavigationManager.NavigateTo("/", true, true);
+                MyNavigationManager.NavigateTo($"/{SystemId}/", true, true);
             }
             _HubContext.SetFuncForReconnect(null);
             return Task.CompletedTask;
@@ -79,7 +78,7 @@ namespace BlazorLibrary.Shared
         [Description(DaprMessage.PubSubName)]
         public async Task Fire_AllUserLogout(string? str)
         {
-            Console.WriteLine("All users logout");
+            _logger.LogTrace("All users logout");
             if (!string.IsNullOrEmpty(str))
             {
                 MessageView?.AddError("", str);
@@ -87,6 +86,11 @@ namespace BlazorLibrary.Shared
             await AuthenticationService.Logout();
 
             _HubContext.SetFuncForReconnect(Fire_RestartUi);
+        }
+
+        private void MyNavigationManager_LocationChanged(object? sender, LocationChangedEventArgs e)
+        {
+            CheckSubSystemId();
         }
 
         private async Task CheckUser()
@@ -118,7 +122,7 @@ namespace BlazorLibrary.Shared
             }
             catch (Exception ex)
             {
-                Console.WriteLine(ex.Message);
+                _logger.LogError(ex.Message);
             }
 
             isPageLoad = true;
@@ -180,7 +184,7 @@ namespace BlazorLibrary.Shared
             }
             catch (Exception ex)
             {
-                Console.WriteLine(ex.Message);
+                _logger.LogError(ex.Message);
             }
             await Task.Delay(TimeSpan.FromSeconds(30));
 
@@ -216,126 +220,117 @@ namespace BlazorLibrary.Shared
             }
             catch (Exception ex)
             {
-                Console.WriteLine(ex.Message);
+                _logger.LogError(ex.Message);
             }
             return new();
         }
 
-        public async Task CheckQuery(string uri)
+        async Task CheckQuery()
         {
-            if (!string.IsNullOrEmpty(uri))
+            try
             {
-                try
+                if (MyNavigationManager.Uri.Contains("token=") || MyNavigationManager.Uri.Contains("systemId=") || MyNavigationManager.Uri.Contains("user="))
                 {
-                    var _url = new Uri(uri);
+                    var _url = new Uri(MyNavigationManager.Uri);
 
                     var queryList = HttpUtility.ParseQueryString(_url.Query);
 
                     if (queryList?.Count > 0)
                     {
+                        IsLoadRemoteAuth = true;
+
                         var newSystemId = queryList.Get("systemId");
                         if (!string.IsNullOrEmpty(newSystemId))
                         {
-                            queryList.Remove("systemId");
                             int.TryParse(newSystemId, out int SystemID);
-                            if (SystemID > 0 && SystemID <= 4)
+                            if (SystemID >= SubsystemType.SUBSYST_ASO && SystemID <= SubsystemType.SUBSYST_P16x)
                             {
-                                await ChangeSubSystem(SystemID);
+                                var viewstatnotify = queryList.Get("viewstatnotify");
+                                if (!string.IsNullOrEmpty(viewstatnotify))
+                                {
+                                    Http.DefaultRequestHeaders.AddHeader(CookieName.SubsystemID, SystemID.ToString());
+                                    MyNavigationManager.NavigateTo($"/{SystemID}/Index/viewstatnotify");
+                                }
                             }
                         }
+                        else
+                        {
+                            MyNavigationManager.NavigateTo(ParseUrlSegments.AbsolutePath(MyNavigationManager.Uri));
+                        }
+
 
                         var newToken = queryList.Get("token");
-
                         if (!string.IsNullOrEmpty(newToken))
                         {
+                            if (await _User.GetUserId() > 0)
+                            {
+                                await AuthenticationService.Logout();
+                            }
                             queryList.Remove("token");
 
                             await AuthenticationService.SetTokenAsync(newToken);
                         }
-
-                        var newUser = queryList.Get("user");
-
-                        if (!string.IsNullOrEmpty(newUser))
+                        else
                         {
-                            queryList.Remove("user");
-
-                            var newPassword = queryList.Get("password");
+                            var newUser = queryList.Get("user");
 
                             if (!string.IsNullOrEmpty(newUser))
                             {
-                                queryList.Remove("password");
-                                IsLoadRemoteAuth = true;
-                                await AuthenticationService.RemoteLogin(new() { User = newUser, Password = newPassword });
+                                if (await _User.GetUserId() > 0)
+                                {
+                                    await AuthenticationService.Logout();
+                                }
+                                queryList.Remove("user");
+
+                                var newPassword = queryList.Get("password");
+
+                                if (!string.IsNullOrEmpty(newUser))
+                                {
+                                    queryList.Remove("password");
+
+                                    await AuthenticationService.RemoteLogin(new() { User = newUser, Password = newPassword });
+                                }
                             }
                         }
-
-                        var newPath = _url.AbsolutePath;
-                        if (queryList.Count > 0)
-                            newPath = $"{newPath}?{queryList}";
-                        MyNavigationManager.NavigateTo(newPath);
                     }
                 }
-                catch (Exception ex)
-                {
-                    Console.WriteLine(ex.Message);
-                }
-                IsLoadRemoteAuth = false;
             }
-        }
-
-        public async Task<int> ChangeSubSystem(int NewSubSystemID)
-        {
-            return await ChangeSubSytemId(NewSubSystemID);
-        }
-
-        private async Task<int> ChangeSubSytemId(int subsystemid)
-        {
-            if (SubsystemID != subsystemid)
+            catch (Exception ex)
             {
-                var id = CheckSubSystemId(subsystemid);
-                var b = await _User.SetSubsystemId(id);
-                if (!b)
-                {
-                    MessageView?.AddError("", StartUIRep["IDS_ERRORCAPTION"]);
-                }
-                else
-                    SubsystemID = id;
-                StateHasChanged();
+                _logger.LogError("Ошибка разбора url адреса {message}", ex.Message);
             }
-            return SubsystemID;
         }
 
-        int CheckSubSystemId(int subsystemid)
+        void CheckSubSystemId()
         {
-            int response = subsystemid;
-            if (!ConfStart.ASO && subsystemid == SubsystemType.SUBSYST_ASO)
+            int response = SystemId;
+            if (!ConfStart.ASO && response == SubsystemType.SUBSYST_ASO)
             {
                 response = ConfStart.UUZS ? SubsystemType.SUBSYST_SZS : ConfStart.STAFF ? SubsystemType.SUBSYST_GSO_STAFF : 0;
             }
-            else if (!ConfStart.UUZS && subsystemid == SubsystemType.SUBSYST_SZS)
+            else if (!ConfStart.UUZS && response == SubsystemType.SUBSYST_SZS)
             {
                 response = ConfStart.ASO ? SubsystemType.SUBSYST_ASO : ConfStart.STAFF ? SubsystemType.SUBSYST_GSO_STAFF : 0;
             }
-            else if (!ConfStart.STAFF && subsystemid == SubsystemType.SUBSYST_GSO_STAFF)
+            else if (!ConfStart.STAFF && response == SubsystemType.SUBSYST_GSO_STAFF)
             {
                 response = ConfStart.ASO ? SubsystemType.SUBSYST_ASO : ConfStart.UUZS ? SubsystemType.SUBSYST_SZS : 0;
             }
-            else if (!ConfStart.P16x && subsystemid == SubsystemType.SUBSYST_P16x)
+            else if (!ConfStart.P16x && response == SubsystemType.SUBSYST_P16x)
             {
                 response = ConfStart.ASO ? SubsystemType.SUBSYST_ASO : ConfStart.UUZS ? SubsystemType.SUBSYST_SZS : ConfStart.STAFF ? SubsystemType.SUBSYST_GSO_STAFF : 0;
             }
-            return response;
-        }
 
-        public void RefrechMe()
-        {
-            ChildContent = null;
-            StateHasChanged();
+            if (SystemId != response)
+            {
+                _logger.LogTrace("Подсистема {id} запрещена", SystemId);
+                MyNavigationManager.NavigateTo($"/{response}/", true, true);
+            }
         }
-
 
         public ValueTask DisposeAsync()
         {
+            MyNavigationManager.LocationChanged -= MyNavigationManager_LocationChanged;
             return _HubContext.DisposeAsync();
         }
     }

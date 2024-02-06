@@ -18,6 +18,7 @@ using static SMSSGsoProto.V1.SMSSGso;
 using static StaffDataProto.V1.StaffData;
 using static UUZSDataProto.V1.UUZSData;
 using Asp.Versioning;
+using static Google.Rpc.Context.AttributeContext.Types;
 
 namespace ServerLibrary.Controllers
 {
@@ -201,22 +202,8 @@ namespace ServerLibrary.Controllers
             using var activity = this.ActivitySourceForController()?.StartActivity();
             try
             {
-                BoolValue response = new();
-                if (_userInfo.GetInfo?.SubSystemID == SubsystemType.SUBSYST_GSO_STAFF)
-                {
-                    var request = SMControlSysProto.V1.DeleteStaffSitItems.Parser.ParseJson(json);
-                    response = await _SMContr.DeleteSitItemAsync(request, deadline: DateTime.UtcNow.AddSeconds(+600));
-                }
-                else if (_userInfo.GetInfo?.SubSystemID == SubsystemType.SUBSYST_P16x)
-                {
-                    var request = CStaffSitItemList.Parser.ParseJson(json);
-                    response = await _SMP16x.DeleteSitItemAsync(request, deadline: DateTime.UtcNow.AddSeconds(+600));
-                }
-                else
-                {
-                    var request = CSitItemInfoList.Parser.ParseJson(json);
-                    response = await _SMSGso.DeleteSitItemAsync(request, deadline: DateTime.UtcNow.AddSeconds(+600));
-                }
+                var request = CSitItemInfoList.Parser.ParseJson(json);
+                var response = await _SMSGso.DeleteSitItemAsync(request, deadline: DateTime.UtcNow.AddSeconds(+600));
                 //BoolValue
                 return Ok(response);
             }
@@ -225,8 +212,56 @@ namespace ServerLibrary.Controllers
                 _logger.WriteLogError(ex, Request.RouteValues["action"]?.ToString());
                 return ex.GetResultStatusCode();
             }
-
         }
+
+        /// <summary>
+        /// Удалить объект из сценария Staff
+        /// </summary>
+        /// <param name="request"></param>
+        /// <returns></returns>
+        [HttpPost]
+        [CheckPermission(new int[] { NameBitsPos.Create, NameBitsPos.CreateNoStandart })]
+        public async Task<IActionResult> DeleteSitItemStaff([FromBody] string json)
+        {
+            using var activity = this.ActivitySourceForController()?.StartActivity();
+            try
+            {
+                var request = SMControlSysProto.V1.DeleteStaffSitItems.Parser.ParseJson(json);
+                var response = await _SMContr.DeleteSitItemAsync(request, deadline: DateTime.UtcNow.AddSeconds(+600));
+                //BoolValue
+                return Ok(response);
+            }
+            catch (Exception ex)
+            {
+                _logger.WriteLogError(ex, Request.RouteValues["action"]?.ToString());
+                return ex.GetResultStatusCode();
+            }
+        }
+
+        /// <summary>
+        /// Удалить объект из сценария P16x
+        /// </summary>
+        /// <param name="request"></param>
+        /// <returns></returns>
+        [HttpPost]
+        [CheckPermission(new int[] { NameBitsPos.Create, NameBitsPos.CreateNoStandart })]
+        public async Task<IActionResult> DeleteSitItemP16([FromBody] string json)
+        {
+            using var activity = this.ActivitySourceForController()?.StartActivity();
+            try
+            {
+                var request = CStaffSitItemList.Parser.ParseJson(json);
+                var response = await _SMP16x.DeleteSitItemAsync(request, deadline: DateTime.UtcNow.AddSeconds(+600));
+                //BoolValue
+                return Ok(response);
+            }
+            catch (Exception ex)
+            {
+                _logger.WriteLogError(ex, Request.RouteValues["action"]?.ToString());
+                return ex.GetResultStatusCode();
+            }
+        }
+
 
         [HttpPost]
         [CheckPermission(new int[] { NameBitsPos.Create, NameBitsPos.CreateNoStandart })]
@@ -254,17 +289,8 @@ namespace ServerLibrary.Controllers
             using var activity = this.ActivitySourceForController()?.StartActivity();
             try
             {
-                BoolValue response = new();
-                if (_userInfo.GetInfo?.SubSystemID == SubsystemType.SUBSYST_P16x)
-                {
-                    var request = CStaffSitItemList.Parser.ParseJson(json);
-                    response = await _SMP16x.UpdateSituationAsync(request, deadline: DateTime.UtcNow.AddSeconds(+600));
-                }
-                else
-                {
-                    var request = UpdateSituationRequest.Parser.ParseJson(json);
-                    response = await _SMSGso.UpdateSituationAsync(request, deadline: DateTime.UtcNow.AddSeconds(+600));
-                }
+                var request = UpdateSituationRequest.Parser.ParseJson(json);
+                var response = await _SMSGso.UpdateSituationAsync(request, deadline: DateTime.UtcNow.AddSeconds(+600));
                 //BoolValue
                 return Ok(response);
             }
@@ -274,6 +300,26 @@ namespace ServerLibrary.Controllers
                 return ex.GetResultStatusCode();
             }
         }
+
+        [HttpPost]
+        [CheckPermission(new int[] { NameBitsPos.Create, NameBitsPos.CreateNoStandart })]
+        public async Task<IActionResult> UpdateSituationP16([FromBody] string json)
+        {
+            using var activity = this.ActivitySourceForController()?.StartActivity();
+            try
+            {
+                var request = CStaffSitItemList.Parser.ParseJson(json);
+                var response = await _SMP16x.UpdateSituationAsync(request, deadline: DateTime.UtcNow.AddSeconds(+600));
+                //BoolValue
+                return Ok(response);
+            }
+            catch (Exception ex)
+            {
+                _logger.WriteLogError(ex, Request.RouteValues["action"]?.ToString());
+                return ex.GetResultStatusCode();
+            }
+        }
+
         /// <summary>
         /// добавляем ситуацию
         /// </summary>

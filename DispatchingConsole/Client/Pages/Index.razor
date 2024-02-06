@@ -140,39 +140,40 @@
             <DivScroll>
                 <MessagesForChat Messages="_webRtc.CurrentChatMessages" />
                 <BlazorLibrary.Shared.Modal.ButtonModal>
-                    <form @onsubmit="SendMessageForClient">
-                        <textarea @onkeydown="OnKeyUp" @onkeydown:preventDefault="_shouldPreventDefault" @ref="_textArea" cols="20" class="form-control" @onpastefiles="OnSetFiles" @bind="_webRtc.TempMessage" @bind:event="oninput" placeholder="@DispRep["TEXT_MESSAGE"]"></textarea>
-                        <BSumbit Text="@DispRep["SEND"]" />
-                        @if (DropFileToChat == null)
-                        {
-                            @if (!IsRecording)
+                    <div class="w-100">
+                        <BlazorLibrary.Shared.FormComponent.FormDefault OnSumbit="SendMessageForClient">
+                            <textarea @onkeydown="OnKeyUp" @onkeydown:preventDefault="_shouldPreventDefault" @ref="_textArea" cols="20" class="form-control" @onpastefiles="OnSetFiles" @bind="_webRtc.TempMessage" @bind:event="oninput" placeholder="@DispRep["TEXT_MESSAGE"]"></textarea>
+                            <BSumbit Text="@DispRep["SEND"]" IsProcessing="context" />
+                            @if (DropFileToChat == null)
                             {
-                                <BPrimary Text="@($"{(UploadForDialog>0?$" {UploadForDialog}KB / {FileSize / 1024}KB":DispRep["UPLOADING"])}")" OnClick="ShowOpenFilePicker">
-                                    <span title="@DispRep["SEND_FILE"]" class="oi oi-data-transfer-upload me-0"></span>
-                                </BPrimary>
+                                @if (!IsRecording)
+                                {
+                                    <BPrimary Text="@($"{(UploadForDialog>0?$" {UploadForDialog}KB / {FileSize / 1024}KB":DispRep["UPLOADING"])}")" OnClick="ShowOpenFilePicker">
+                                        <span title="@DispRep["SEND_FILE"]" class="oi oi-data-transfer-upload me-0"></span>
+                                    </BPrimary>
+                                }
+                                @if (_webRtc.GetStateSelectCalling <= StateCall.Disconnect && UploadForDialog == 0)
+                                {
+                                    <button title="@(IsRecording?GsoRep["STOP_RECORD"]:GsoRep["IDS_MICROPHONE"])" class="btn @(IsRecording?"btn-warning align-items-center":"btn-danger") m-1" type="button" @onclick="()=>(IsRecording?SendStopRecordAudio():StartStreamRecordAudio())">
+                                        <span class="oi @(IsRecording?"oi-media-stop":"oi-microphone") mx-1"></span>
+                                        @if (IsRecording == true)
+                                        {
+                                            <span class="ms-1">@TimeLeft</span>
+                                        }
+                                    </button>
+                                }
                             }
-                            @if (_webRtc.GetStateSelectCalling <= StateCall.Disconnect && UploadForDialog == 0)
+                            else
                             {
-                                <button class="btn @(IsRecording?"btn-warning align-items-center":"btn-danger") m-1" type="button" @onclick="()=>(IsRecording?SendStopRecordAudio():StartStreamRecordAudio())">
-                                    <span class="oi @(IsRecording?"oi-media-stop":"oi-microphone") mx-1"></span>
-                                    @if (IsRecording == true)
-                                    {
-                                        <span class="ms-1">@TimeLeft</span>
-                                    }
-                                </button>
+                                <span class="m-1">@($"{(UploadForDrop > 0 ? $" {UploadForDrop}KB / {FileSizeForDrop / 1024}KB" : DispRep["UPLOADING"])}")</span>
                             }
-                        }
-                        else
-                        {
-                            <span class="m-1">@($"{(UploadForDrop > 0 ? $" {UploadForDrop}KB / {FileSizeForDrop / 1024}KB" : DispRep["UPLOADING"])}")</span>
-                        }
-                    </form>
+                        </BlazorLibrary.Shared.FormComponent.FormDefault>
+                    </div>
                 </BlazorLibrary.Shared.Modal.ButtonModal>
             </DivScroll>
         }
     </div>
     <div id="remoteVideoArray" class="col col-md-5 d-none"></div>
-
 </div>
 
 
@@ -194,13 +195,13 @@
                                 }
                             </ChildContent>
                         </ResultView>
-                        <PSticky Color="secondary text-end" StyleBottom="0">
+                        <ButtonModal AddClass="text-end">
                             <BCancel OnClick="CloseEditListConnect" />
                             @if (_webRtc.GetStateSelectCalling <= StateCall.Disconnect)
                             {
                                 <BDelete AddClass="ms-auto" OnClick="StartDeleteChatRoom" />
                             }
-                        </PSticky>
+                        </ButtonModal>
                     }
                     else
                     {
@@ -219,7 +220,7 @@
                                         }
                                     </ChildContent>
                                 </ResultView>
-                                <PSticky Color="secondary text-end" StyleBottom="0">
+                                <ButtonModal AddClass="text-end">
                                     <BCancel OnClick="CloseEditListConnect" />
                                     @if (_webRtc.GetStateSelectCalling <= StateCall.Disconnect)
                                     {
@@ -236,7 +237,7 @@
                             </BSecondary>*@
                                         </div>
                                     }
-                                </PSticky>
+                                </ButtonModal>
                             </DivScroll>
                         </div>
                         <div class="col-md-6">
@@ -256,7 +257,7 @@
                                 </ResultView>
                                 @if (NewItemConnect?.Count > 1)
                                 {
-                                    <PSticky Color="secondary" StyleBottom="0">
+                                    <ButtonModal>
                                         @*Удалить все объекты из списка*@
                                         <BSecondary IsOutline="true" OnClick="RemoveAll">
                                             <span class="oi oi-media-skip-backward"></span>
@@ -272,7 +273,7 @@
                                         {
                                             <BSave AddClass="m-1 ms-auto" OnClick="SaveChangeItems" />
                                         }
-                                    </PSticky>
+                                    </ButtonModal>
                                 }
 
                             </DivScroll>

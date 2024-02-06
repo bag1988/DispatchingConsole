@@ -277,7 +277,7 @@ namespace ServerLibrary.Controllers
                 if (request.GroupInfo.GroupID > 0)
                     EventCode = 5;//IDS_REG_GROUP_UPDATE
 
-                await _Log.Write(Source: (int)GSOModules.SzsForms_Module, EventCode: EventCode, SubsystemID: _userInfo.GetInfo?.SubSystemID, UserID: _userInfo.GetInfo?.UserID);
+                await _Log.Write(Source: (int)GSOModules.SzsForms_Module, EventCode: EventCode, SubsystemID: SubsystemType.SUBSYST_SZS, UserID: _userInfo.GetInfo?.UserID);
 
             }
             catch (Exception ex)

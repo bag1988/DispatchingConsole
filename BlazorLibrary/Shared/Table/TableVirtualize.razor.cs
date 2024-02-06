@@ -1,6 +1,7 @@
 ﻿using BlazorLibrary.Models;
 using Microsoft.AspNetCore.Components;
 using Microsoft.AspNetCore.Components.Web.Virtualization;
+using Microsoft.Extensions.Logging;
 using Microsoft.JSInterop;
 using SMDataServiceProto.V1;
 
@@ -14,18 +15,8 @@ namespace BlazorLibrary.Shared.Table
         [Parameter]
         public bool IsSetFirstSelect { get; set; } = false;
 
-        int Colspan
-        {
-            get
-            {
-                return Provider?.ThList?.Count ?? 0;
-            }
-        }
-
-        ElementReference? div;
-
-        int WindowHeight = 800;
-
+        int Colspan => Provider?.ThList?.Count ?? 0;
+        
         GetItemRequest request = new();
 
         bool IsLoadData = false;
@@ -38,30 +29,16 @@ namespace BlazorLibrary.Shared.Table
 
         protected override async Task OnInitializedAsync()
         {
-            request = Provider?.DefaultRequestItems ?? new() { ObjID = new OBJ_ID() { SubsystemID = 0, ObjID = 0, StaffID = 0 }, LSortOrder = 1, BFlagDirection = 1, SkipItems = 0 };
-            request.CountData = 200;
-            await LoadSelectItem();
-        }
-        protected override async Task OnParametersSetAsync()
-        {
             try
             {
-                if (IsSticky == true)
-                {
-                    await Task.Yield();
-                    var d = await JSRuntime.InvokeAsync<double>("GetWindowHeight", div);
-                    if (Devision != null && Devision != 0 && d > 0)
-                    {
-                        d = d / Devision.Value;
-                    }
-                    WindowHeight = (int)Math.Truncate(d);
-                }
+                request = Provider?.DefaultRequestItems ?? new() { ObjID = new OBJ_ID() { SubsystemID = 0, ObjID = 0, StaffID = 0 }, LSortOrder = 1, BFlagDirection = 1, SkipItems = 0 };
+                request.CountData = 200;
+                await LoadSelectItem();
             }
             catch (Exception ex)
             {
-                Console.WriteLine(ex.Message);
+                _logger.LogError(ex.Message);
             }
-            StateHasChanged();
         }
 
         private ValueTask<ItemsProviderResult<TItem>> GetItems(ItemsProviderRequest req)

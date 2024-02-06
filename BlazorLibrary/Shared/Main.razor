@@ -1,41 +1,41 @@
 ﻿@using BlazorLibrary.Shared.NavLink
-
+@inject ILogger<Main> _logger
 <div class="page" @onclick="OnSetActive" @onkeyup="OnSetActive">
-    @if (SubsystemID != 0)
+    @if (isPageLoad)
     {
         <NavMenu Title="@Title" Width="Width">
-            @Menu?.Invoke(SubsystemID)
+            @if (!IsLoadRemoteAuth)
+            {
+                @Menu
+            }
         </NavMenu>
-    }
 
-    <main @ref="main" tabindex="-1" class="main">
-        <article class="px-4">
-            @if (SubsystemID != 0 && !IsLoadRemoteAuth)
-            {
-                <AuthorizeView>
-                    <Authorizing>
-                        <p class="alert alert-warning mt-3">@GsoRep["CheckLogin"]</p>
-                    </Authorizing>
-                    <Authorized>
-                        <div class="h-100">
-                            @if (isPageLoad)
-                            {
-                                @ChildContent?.Invoke(SubsystemID)
-                            }
-                        </div>
-                    </Authorized>
-                    <NotAuthorized>
-                        <LoginPage />
-                    </NotAuthorized>
-                </AuthorizeView>               
-            }
-            else
-            {
-                <PLoad />
-            }
-        </article>
-        <MessageViewList @ref="MessageView" />
-    </main>
+        <main tabindex="-1" class="main">
+            <article class="px-4">
+                @if (!IsLoadRemoteAuth)
+                {
+                    <AuthorizeView>
+                        <Authorizing>
+                            <p class="alert alert-warning mt-3">@GsoRep["CheckLogin"]</p>
+                        </Authorizing>
+                        <Authorized>
+                            <div style="height:100vh; position:relative;">
+                                @ChildContent
+                            </div>
+                        </Authorized>
+                        <NotAuthorized>
+                            <LoginPage />
+                        </NotAuthorized>
+                    </AuthorizeView>
+                }
+                else
+                {
+                    <PLoad />
+                }
+            </article>
+            <MessageViewList @ref="MessageView" />
+        </main>
+    }
 </div>
 
 

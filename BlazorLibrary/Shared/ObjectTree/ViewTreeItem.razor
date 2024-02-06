@@ -122,7 +122,7 @@ else
     {
         if (Items == null)
             return;
-        var index = e.Code == "ArrowUp" ? -1 : 1;
+        var index = e.Key == "ArrowUp" ? -1 : 1;
 
         var newSelect = GetLevelItems.GetNextSelectItem(GetLastElem, index);
 
@@ -136,11 +136,11 @@ else
     {
         if (Items?.Any(x => x.Key.Equals(GetLastElem)) ?? false)
         {
-            if (e.Code == "ArrowRight" && (ItemViewChild == null || !ItemViewChild.Equals(GetLastElem)) && GetLastElem != null)
+            if (e.Key == "ArrowRight" && (ItemViewChild == null || !ItemViewChild.Equals(GetLastElem)) && GetLastElem != null)
             {
                 await SetCurrentItemView(GetLastElem);
             }
-            else if (e.Code == "ArrowLeft")
+            else if (e.Key == "ArrowLeft")
             {
                 ItemViewChild = default;
             }

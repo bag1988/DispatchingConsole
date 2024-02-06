@@ -16,9 +16,6 @@ namespace BlazorLibrary.Shared.Messages
 
     partial class CreateMessage : IAsyncDisposable
     {
-        [CascadingParameter]
-        public int SubsystemID { get; set; } = SubsystemType.SUBSYST_ASO;
-
         [Parameter]
         public int? MsgId { get; set; }
 
@@ -31,6 +28,8 @@ namespace BlazorLibrary.Shared.Messages
         [Parameter]
         public EventCallback<OBJ_ID?> CallBack { get; set; }
 
+        int SystemId => ParseUrlSegments.GetSystemId(MyNavigationManager.Uri);
+
         private MsgParam? Model = null;
         private MsgParam? OldModel = null;
 
@@ -41,8 +40,6 @@ namespace BlazorLibrary.Shared.Messages
         private long _uploaded = 0;
 
         private long _fileLength = 0;
-
-        bool IsProcessing = false;
 
         private AudioPlayerStream? player = default!;
 
@@ -75,7 +72,6 @@ namespace BlazorLibrary.Shared.Messages
         {
             if (Model != null && Edit == true)
             {
-                IsProcessing = true;
                 _fileLength = 0;
                 _uploaded = 0;
 
@@ -95,7 +91,6 @@ namespace BlazorLibrary.Shared.Messages
                         if (string.IsNullOrEmpty(ActiveUrlFile))
                         {
                             MessageView?.AddError("", AsoRep["IDS_MISMATCHERROR"]);
-                            IsProcessing = false;
                             return;
                         }
 
@@ -106,17 +101,15 @@ namespace BlazorLibrary.Shared.Messages
                         if (fileLength < 8000)
                         {
                             MessageView?.AddError("", AsoRep["IDS_MISMATCHERROR"]);
-                            IsProcessing = false;
                             return;
                         }
                     }
 
-                    if (SubsystemID == SubsystemType.SUBSYST_SZS)
+                    if (SystemId == SubsystemType.SUBSYST_SZS)
                     {
                         if (TimeOut == 0)
                         {
                             MessageView?.AddError("", GsoRep["ERROR_TIMEOUT"]);
-                            IsProcessing = false;
                             return;
                         }
                         else if (TimeOut > 0)
@@ -128,7 +121,7 @@ namespace BlazorLibrary.Shared.Messages
 
                     if (!Model.Equals(OldModel) || IsChangeSound)
                     {
-                        OBJ_ID oBJ_ID = new OBJ_ID() { ObjID = (MsgId ?? 0), StaffID = StaffId, SubsystemID = SubsystemID };
+                        OBJ_ID oBJ_ID = new OBJ_ID() { ObjID = (MsgId ?? 0), StaffID = StaffId, SubsystemID = SystemId };
                         OBJ_ID newMsgId = new();
 
                         string? json = JsonFormatter.Default.Format(new MsgInfo() { Msg = oBJ_ID, Param = Model });
@@ -165,7 +158,6 @@ namespace BlazorLibrary.Shared.Messages
                     }
                 }
             }
-            IsProcessing = false;
         }
 
         private async Task GetList()
@@ -174,7 +166,7 @@ namespace BlazorLibrary.Shared.Messages
 
             if (MsgId != null)
             {
-                OBJ_ID request = new OBJ_ID() { ObjID = MsgId.Value, StaffID = StaffId, SubsystemID = SubsystemID };
+                OBJ_ID request = new OBJ_ID() { ObjID = MsgId.Value, StaffID = StaffId, SubsystemID = SystemId };
                 var result = await Http.PostAsJsonAsync("api/v1/GetMessageShortInfo", request, ComponentDetached);
                 if (result.IsSuccessStatusCode)
                 {
@@ -189,7 +181,7 @@ namespace BlazorLibrary.Shared.Messages
                         SaveFileOrBase = Model?.Sound?.Length < 520 ? 1 : 0;
                         OldSaveFileOrBase = SaveFileOrBase;
 
-                        if (SubsystemID == SubsystemType.SUBSYST_SZS && Model?.DopParam > 0)
+                        if (SystemId == SubsystemType.SUBSYST_SZS && Model?.DopParam > 0)
                         {
                             TimeOut = Model.DopParam / 20;
                         }
@@ -218,7 +210,7 @@ namespace BlazorLibrary.Shared.Messages
                         WavHeaderModel m = new(Model?.Format.Memory.ToArray() ?? new byte[0]);
                         if (player != null)
                         {
-                            ActiveUrlFile = $"api/v1/GetSoundServer?MsgId={MsgId}&Staff={StaffId}&System={SubsystemID}&version={DateTime.Now.Second}";
+                            ActiveUrlFile = $"api/v1/GetSoundServer?MsgId={MsgId}&Staff={StaffId}&System={SystemId}&version={DateTime.Now.Second}";
                             await player.SetUrlSound(ActiveUrlFile);
                         }
 

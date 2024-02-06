@@ -5,10 +5,10 @@
     <BodyContent>
         @if (Model != null)
         {
-            <form id="createmessage" @onsubmit="WriteMessages">
+            <BlazorLibrary.Shared.FormComponent.FormDefault OnSumbit="WriteMessages">
                 <div class="mb-3">
                     <label class="form-label">@GsoRep["IDS_STRING_NAME"]</label>
-                    <InputFocus disabled="@(MsgId>0 && Edit==false)" @bind-Value="Model.MsgName" />
+                    <InputFocus disabled="@(MsgId>0 && Edit==false)" @bind-Value="Model.MsgName" maxlength="255" required />
                 </div>
                 <div class="mb-3">
                     <label class="form-label">@GsoRep["IDS_STRING_SIT_COMMENT"]</label>
@@ -36,7 +36,7 @@
                         <SyntezPlayer Text="@Model.MsgText" Rate="@SyntezData.Rate" VoiceIsMen="@SyntezData.VoiceIsMen" />
                     }
                 </div>
-                @if (SubsystemID == SubsystemType.SUBSYST_SZS)
+                @if (SystemId == SubsystemType.SUBSYST_SZS)
                 {
                     @*Время удержания оконечным устройством линии связи (с)*@
                     <div class="mb-3 d-flex align-items-center">
@@ -60,24 +60,21 @@
                         </div>
                     </div>
                 }
-            </form>
-
+                <ButtonModal>
+                    <CheckP BitPosList="@(new[]{NameBitsPos.Create, NameBitsPos.CreateNoStandart})">
+                        @if (Edit == true)
+                        {
+                            <BSumbit Text="@($"{(_uploaded>0? $"{_uploaded}KB / {_fileLength / 1024}KB":GsoRep["IDS_STRING_SAVE"])}")" IsProcessing="context" />
+                        }
+                    </CheckP>
+                    <BCancel OnClick="Cancel" />
+                    <AudioPlayerStream @ref="player" TitleName="@Model?.MsgName" />
+                </ButtonModal>
+            </BlazorLibrary.Shared.FormComponent.FormDefault>
         }
         else
         {
             <PLoad />
         }
     </BodyContent>
-    <ButtonContent>
-        <div class="d-flex align-items-center">
-            <CheckP BitPosList="@(new[]{NameBitsPos.Create, NameBitsPos.CreateNoStandart})">
-                @if (Edit == true)
-                {
-                    <BSumbit FormId="createmessage" Text="@($"{(_uploaded>0? $"{_uploaded}KB / {_fileLength / 1024}KB":GsoRep["IDS_STRING_SAVE"])}")" IsProcessing="IsProcessing" />
-                }
-            </CheckP>
-            <BCancel OnClick="Cancel" />
-            <AudioPlayerStream @ref="player" TitleName="@Model?.MsgName" />
-        </div>
-    </ButtonContent>
 </ModalDialog>

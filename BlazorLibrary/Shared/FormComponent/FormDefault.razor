@@ -1,10 +1,14 @@
-﻿<form id="@FormID" @onsubmit="SendSumbit">
-    @ChildContent
+﻿@inject ILogger<FormDefault> _logger;
+<form @ref="form" id="@FormID" @onsubmit="SendSumbit" @onsubmit:preventDefault="true" @onsubmit:stopPropagation="true" data-enhance>
+    @if (ChildContent != null)
+    {
+        @ChildContent(IsProcessing)
+    }
 </form>
 
 @code {
     [Parameter]
-    public RenderFragment? ChildContent { get; set; }
+    public RenderFragment<bool>? ChildContent { get; set; }
 
     [Parameter]
     public EventCallback OnSumbit { get; set; }
@@ -14,12 +18,21 @@
 
     public bool IsProcessing = false;
 
+    ElementReference form;
+
     async Task SendSumbit()
     {
         IsProcessing = true;
-        if (OnSumbit.HasDelegate)
-            await OnSumbit.InvokeAsync();
+        await form.FocusAsync();
+        try
+        {
+            if (OnSumbit.HasDelegate)
+                await OnSumbit.InvokeAsync();
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex.Message);
+        }
         IsProcessing = false;
     }
-
 }

@@ -22,9 +22,6 @@ namespace BlazorLibrary.Shared.Situation
 {
     partial class CreateSituation : IAsyncDisposable, IPubSubMethod
     {
-        [CascadingParameter]
-        public int SubsystemID { get; set; } = SubsystemType.SUBSYST_ASO;
-
         [Parameter]
         public int? SitId { get; set; }
 
@@ -36,6 +33,8 @@ namespace BlazorLibrary.Shared.Situation
 
         [Parameter]
         public bool IsReadOnly { get; set; } = false;
+
+        int SystemId => ParseUrlSegments.GetSystemId(MyNavigationManager.Uri);
 
         private string TitleName { get; set; } = "";
 
@@ -83,7 +82,7 @@ namespace BlazorLibrary.Shared.Situation
 
             if (SitId == null)
             {
-                NewSit.Sit = new OBJ_ID() { StaffID = StaffId, SubsystemID = SubsystemID };
+                NewSit.Sit = new OBJ_ID() { StaffID = StaffId, SubsystemID = SystemId };
                 NewSit.SitTypeID = 0;//0-для нестандартного сценария
                 NewSit.SitName = "# " + AsoRep["ScenarioFrom"] + " " + DateTime.Now.ToString("dd.MM") + "_" + DateTime.Now.ToString("T");
 
@@ -101,7 +100,7 @@ namespace BlazorLibrary.Shared.Situation
 
             }
 
-            if (SubsystemID == SubsystemType.SUBSYST_ASO)
+            if (SystemId == SubsystemType.SUBSYST_ASO)
             {
                 await GetLabelsForFiltr();
                 await GetSituationLabelField();
@@ -156,9 +155,9 @@ namespace BlazorLibrary.Shared.Situation
         private async Task LoadList()
         {
             await GetListFolder();
-            if (SubsystemID == SubsystemType.SUBSYST_ASO)
+            if (SystemId == SubsystemType.SUBSYST_ASO)
                 await GetListABC();
-            else if (SubsystemID == SubsystemType.SUBSYST_SZS)
+            else if (SystemId == SubsystemType.SUBSYST_SZS)
             {
                 await GetDeviceTypes();
             }
@@ -177,7 +176,7 @@ namespace BlazorLibrary.Shared.Situation
                 {
                     var newItem = ListItem.Parser.ParseFrom(value);
 
-                    if (newItem != null && newItem.List.SubsystemID == SubsystemID)
+                    if (newItem != null && newItem.List.SubsystemID == SystemId)
                     {
                         if (string.IsNullOrEmpty(newItem.Name) && string.IsNullOrEmpty(newItem.Comm) && newItem.Priority == 0)
                         {
@@ -212,7 +211,7 @@ namespace BlazorLibrary.Shared.Situation
         {
             try
             {
-                if (SubsystemID == SubsystemType.SUBSYST_SZS)
+                if (SystemId == SubsystemType.SUBSYST_SZS)
                 {
                     await GetDeviceTypes();
                     StateHasChanged();
@@ -229,7 +228,7 @@ namespace BlazorLibrary.Shared.Situation
         {
             try
             {
-                if (SubsystemID == SubsystemType.SUBSYST_ASO)
+                if (SystemId == SubsystemType.SUBSYST_ASO)
                 {
                     var newItem = AbonentItem.Parser.ParseFrom(AbonentItemByte);
 
@@ -251,7 +250,7 @@ namespace BlazorLibrary.Shared.Situation
         {
             try
             {
-                if (SubsystemID == SubsystemType.SUBSYST_ASO)
+                if (SystemId == SubsystemType.SUBSYST_ASO)
                 {
                     var newItem = AbonentItem.Parser.ParseFrom(AbonentItemByte);
 
@@ -277,7 +276,7 @@ namespace BlazorLibrary.Shared.Situation
             if (SitId != null)
             {
                 // !!! возможно нужно вызвать S_GetSituationList - была ошибка в имени
-                var result = await Http.PostAsJsonAsync("api/v1/GetSituationInfo", new OBJ_ID() { ObjID = SitId.Value, StaffID = StaffId, SubsystemID = SubsystemID });
+                var result = await Http.PostAsJsonAsync("api/v1/GetSituationInfo", new OBJ_ID() { ObjID = SitId.Value, StaffID = StaffId, SubsystemID = SystemId });
                 if (result.IsSuccessStatusCode)
                 {
                     NewSit = await result.Content.ReadFromJsonAsync<SituationInfo>() ?? new();
@@ -294,7 +293,7 @@ namespace BlazorLibrary.Shared.Situation
                         else
                             NewSit.Param = null;
 
-                        if (SubsystemID == SubsystemType.SUBSYST_ASO || SubsystemID == SubsystemType.SUBSYST_SZS)
+                        if (SystemId == SubsystemType.SUBSYST_ASO || SystemId == SubsystemType.SUBSYST_SZS)
                             await GetSituationItems(NewSit.Sit);
                     }
 
@@ -342,7 +341,7 @@ namespace BlazorLibrary.Shared.Situation
 
                 if (OldList != null && OldList.Any())
                 {
-                    if (SubsystemID == SubsystemType.SUBSYST_SZS)
+                    if (SystemId == SubsystemType.SUBSYST_SZS)
                     {
                         var f = OldList.FirstOrDefault(x => x.DevType != SubsystemType.SUBSYST_PRD);
 
@@ -373,7 +372,7 @@ namespace BlazorLibrary.Shared.Situation
                     foreach (var GroupList in OldList.GroupBy(x => x.ListID))
                     {
                         child = new();
-                        var key = Folders?.FirstOrDefault(x => x.OBJID.SubsystemID == SubsystemID && x.OBJID.Equals(GroupList.Key));
+                        var key = Folders?.FirstOrDefault(x => x.OBJID.SubsystemID == SystemId && x.OBJID.Equals(GroupList.Key));
 
                         if (key != null)
                         {
@@ -384,7 +383,7 @@ namespace BlazorLibrary.Shared.Situation
                         }
                         else
                         {
-                            if (SubsystemID == SubsystemType.SUBSYST_ASO)
+                            if (SystemId == SubsystemType.SUBSYST_ASO)
                             {
                                 foreach (var GroupType in GroupList.GroupBy(x => x.Name.Substring(0, 1)))
                                 {
@@ -456,7 +455,7 @@ namespace BlazorLibrary.Shared.Situation
                                 {
                                     ObjID = x.ObjectParam?.ObjectInfo?.ObjID ?? 0,
                                     StaffID = StaffId,
-                                    SubsystemID = SubsystemID
+                                    SubsystemID = SystemId
                                 },
                                 Type = ListType.MEN
                             });
@@ -483,7 +482,7 @@ namespace BlazorLibrary.Shared.Situation
         /// <returns></returns>
         private async Task GetListFolder()
         {
-            var result = await Http.PostAsJsonAsync("api/v1/GetObjects_IList", new OBJ_ID() { StaffID = StaffId, SubsystemID = SubsystemID });
+            var result = await Http.PostAsJsonAsync("api/v1/GetObjects_IList", new OBJ_ID() { StaffID = StaffId, SubsystemID = SystemId });
             if (result.IsSuccessStatusCode)
             {
                 var re = await result.Content.ReadFromJsonAsync<List<Objects>>();
@@ -502,7 +501,7 @@ namespace BlazorLibrary.Shared.Situation
         /// <returns></returns>
         private async Task GetSubsystemParam()
         {
-            var result = await Http.PostAsJsonAsync("api/v1/GetSubsystemParam", new OBJ_ID() { StaffID = StaffId, SubsystemID = SubsystemID });
+            var result = await Http.PostAsJsonAsync("api/v1/GetSubsystemParam", new OBJ_ID() { StaffID = StaffId, SubsystemID = SystemId });
             if (result.IsSuccessStatusCode)
             {
                 SubParam = await result.Content.ReadFromJsonAsync<SubsystemParam>() ?? new();
@@ -514,7 +513,7 @@ namespace BlazorLibrary.Shared.Situation
         {
             if (SitId > 0)
             {
-                var result = await Http.PostAsJsonAsync("api/v1/GetLabelFieldConfirmBySituation", new OBJ_Key() { ObjID = new() { ObjID = SitId.Value, StaffID = StaffId, SubsystemID = SubsystemID }, ObjType = 1 });
+                var result = await Http.PostAsJsonAsync("api/v1/GetLabelFieldConfirmBySituation", new OBJ_Key() { ObjID = new() { ObjID = SitId.Value, StaffID = StaffId, SubsystemID = SystemId }, ObjType = 1 });
                 if (result.IsSuccessStatusCode)
                 {
                     ConfirmPassword = await result.Content.ReadFromJsonAsync<IntID>() ?? new();
@@ -541,7 +540,7 @@ namespace BlazorLibrary.Shared.Situation
             EditSubParam = false;
             if (param != null)
             {
-                if (SubsystemID == SubsystemType.SUBSYST_ASO)
+                if (SystemId == SubsystemType.SUBSYST_ASO)
                 {
                     if (param.TimeoutAb < 60)
                     {
@@ -752,10 +751,10 @@ namespace BlazorLibrary.Shared.Situation
             if (!ErrorSave)
             {
                 await GoCallBack();
-                if (SubsystemID == SubsystemType.SUBSYST_ASO)
+                if (SystemId == SubsystemType.SUBSYST_ASO)
                 {
                     _ = UpdateSituationLabelField(sitId);
-                    _ = UpdateLabelFieldConfirmSituation(new OBJ_KeyInt() { ID = ConfirmPassword.ID, OBJKey = new() { ObjType = 1, ObjID = new() { ObjID = sitId, StaffID = StaffId, SubsystemID = SubsystemID } } });
+                    _ = UpdateLabelFieldConfirmSituation(new OBJ_KeyInt() { ID = ConfirmPassword.ID, OBJKey = new() { ObjType = 1, ObjID = new() { ObjID = sitId, StaffID = StaffId, SubsystemID = SystemId } } });
                 }
             }
 
@@ -797,7 +796,7 @@ namespace BlazorLibrary.Shared.Situation
             if (sitId > 0)
             {
                 SituationLabelField request = new();
-                request.SubsystemId = SubsystemID;
+                request.SubsystemId = SystemId;
                 request.StaffId = StaffId;
                 request.SitId = sitId;
                 request.FiltrDynamic = FiltrModel.ToByteString();
@@ -819,7 +818,7 @@ namespace BlazorLibrary.Shared.Situation
             {
                 if (SitId > 0)
                 {
-                    var result = await Http.PostAsJsonAsync("api/v1/GetSituationLabelField", new SitLabelField() { StaffId = StaffId, SubsystemId = SubsystemID, SitId = SitId.Value });
+                    var result = await Http.PostAsJsonAsync("api/v1/GetSituationLabelField", new SitLabelField() { StaffId = StaffId, SubsystemId = SystemId, SitId = SitId.Value });
                     if (result.IsSuccessStatusCode)
                     {
                         var re = await result.Content.ReadAsStringAsync();
@@ -876,7 +875,7 @@ namespace BlazorLibrary.Shared.Situation
                     var re = await result.Content.ReadFromJsonAsync<List<string>>();
                     if (re != null)
                     {
-                        var newData = re.Select(x => new Objects() { Name = x, OBJID = new OBJ_ID() { ObjID = re.IndexOf(x), StaffID = StaffId, SubsystemID = SubsystemID }, Type = ListType.MAN });
+                        var newData = re.Select(x => new Objects() { Name = x, OBJID = new OBJ_ID() { ObjID = re.IndexOf(x), StaffID = StaffId, SubsystemID = SystemId }, Type = ListType.MAN });
                         if (Folders == null)
                             Folders = new();
                         lock (Folders)
@@ -907,7 +906,7 @@ namespace BlazorLibrary.Shared.Situation
                 {
                     if (IsNoStandart)
                     {
-                        return SubsystemID switch
+                        return SystemId switch
                         {
                             SubsystemType.SUBSYST_SZS => GsoRep["IDS_STRING_CREATE_SIT_SZS"],
                             SubsystemType.SUBSYST_GSO_STAFF => GsoRep["IDS_STRING_CREATE_SIT_CU"],
@@ -916,7 +915,7 @@ namespace BlazorLibrary.Shared.Situation
                     }
                     else
                     {
-                        return SubsystemID switch
+                        return SystemId switch
                         {
                             SubsystemType.SUBSYST_SZS => GsoRep["IDS_PR_SZS_3"],
                             SubsystemType.SUBSYST_GSO_STAFF => GsoRep["IDS_PR_CU_3"],

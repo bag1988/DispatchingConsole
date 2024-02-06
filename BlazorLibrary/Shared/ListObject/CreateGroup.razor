@@ -2,14 +2,14 @@
 
 <ModalDialog Title="@(DeviceObj_ID?.ObjID > 0?Model?.GroupName:UUZSRep["IDS_STRING_NEW_GROUP"])" ButtonCloseEvent="CallAction">
     <BodyContent>
-        <form id="creategroup" @onsubmit="OnOK">
+        <BlazorLibrary.Shared.FormComponent.FormDefault OnSumbit="OnOK">
             @if (Model != null)
             {
                 @*Наименование группы*@
                 <div class="row mb-2">
                     <label class="form-label col-md-3">@UUZSRep["IDS_STRING_NAME_GROUP"]</label>
                     <div class="col-md-9">
-                        <InputFocus @bind-Value="Model.GroupName" />
+                        <InputFocus @bind-Value="Model.GroupName" maxlength="255" required />
                     </div>
                 </div>
                 <div class="row mb-2">
@@ -23,7 +23,7 @@
                             }
                             else
                             {
-                                <input type="number" class="form-control" @bind="Model.GroupID">
+                                <input type="number" min="1" max="65535" class="form-control" @bind="Model.GroupID" required>
                             }
                         </div>
                     </div>
@@ -31,7 +31,7 @@
                     <div class="row col-md-6">
                         <label class="form-label col-md-4">@UUZSRep["IDS_STRING_LENGTH_TIMESLOT"], @UUZSRep["IDS_STRING_MSEK"]</label>
                         <div class="col-md-8">
-                            <input type="number" class="form-control" @bind="Model.TimeslotLength">
+                            <input type="number" max="99999999999" class="form-control" @bind="Model.TimeslotLength" required>
                         </div>
                     </div>
                 </div>
@@ -41,7 +41,7 @@
                     <div class="row col-md-6">
                         <label class="form-label col-md-4">@UUZSRep["IDS_STRING_PRIOR_GROUP"]</label>
                         <div class="col-md-8">
-                            <input type="number" min="1" max="50" class="form-control" @bind="Model.Prior">
+                            <input type="number" min="1" max="50" class="form-control" @bind="Model.Prior" required>
                         </div>
                     </div>
 
@@ -87,7 +87,7 @@
                                 <span class="oi oi-volume-high text-warning"></span>@item.DevName
                             </ChildContent>
                         </ResultView>
-                        <PSticky Color="secondary text-end" StyleBottom="0">
+                        <ButtonModal AddClass="text-end">
                             <BCancel OnClick="CallAction" />
                             @if (GetListTree?.Any() ?? false)
                             {
@@ -100,7 +100,7 @@
                                     </BSecondary>
                                 </div>
                             }
-                        </PSticky>
+                        </ButtonModal>
                     </DivScroll>
                 </div>
                 <div class="col-md-6">
@@ -117,7 +117,7 @@
                         @if (SelectedFolders?.Any() ?? false)
                         {
                             <CheckP BitPosList="@(new[]{NameBitsPos.Create, NameBitsPos.CreateNoStandart})">
-                                <PSticky Color="secondary" StyleBottom="0">
+                                <ButtonModal>
                                     @*Удалить все объекты из списка*@
                                     <BSecondary IsOutline="true" HotKey="@KeyCode.AddSelectAll" OnClick="RemoveAll">
                                         <span class="oi oi-media-skip-backward"></span>
@@ -127,14 +127,14 @@
                                     <BSecondary IsOutline="true" HotKey="@KeyCode.AddSelect" OnClick="RemoveSelect">
                                         <span class="oi oi-caret-left"></span>
                                     </BSecondary>
-                                    <BSumbit IsProcessing="IsProcessing" FormId="creategroup" AddClass="m-1 ms-auto" />
-                                </PSticky>
+                                    <BSumbit IsProcessing="context" AddClass="m-1 ms-auto" />
+                                </ButtonModal>
                             </CheckP>
                         }
                     </DivScroll>
                 </div>
             </div>
-        </form>
+        </BlazorLibrary.Shared.FormComponent.FormDefault>
     </BodyContent>
 </ModalDialog>
 

@@ -1,13 +1,16 @@
 ﻿<div class="input-group">
-    <input @ref="_input1" type="text" maxlength="3" placeholder="xxx" class="form-control" @bind="Part1" @bind:event="oninput">
-    <input @ref="_input2" type="text" maxlength="3" placeholder="xxx" class="form-control" @bind="Part2" @bind:event="oninput">
-    <input @ref="_input3" type="text" maxlength="3" placeholder="xxx" class="form-control" @bind="Part3" @bind:event="oninput">
-    <input @ref="_input4" type="text" maxlength="3" placeholder="xxx" class="form-control" @bind="Part4" @bind:event="oninput">
+    <input @ref="_input1" type="text" min="0" max="255" placeholder="xxx" class="form-control" @bind="Part1" @bind:event="oninput" required="@(IsRequired? "required": null)">
+    <input @ref="_input2" type="text" min="0" max="255" placeholder="xxx" class="form-control" @bind="Part2" @bind:event="oninput" required="@(IsRequired? "required": null)">
+    <input @ref="_input3" type="text" min="0" max="255" placeholder="xxx" class="form-control" @bind="Part3" @bind:event="oninput" required="@(IsRequired? "required": null)">
+    <input @ref="_input4" type="text" min="0" max="255" placeholder="xxx" class="form-control" @bind="Part4" @bind:event="oninput" required="@(IsRequired? "required": null)">
 </div>
 
 @code {
     [Parameter]
     public string? Value { get; set; }
+
+    [Parameter]
+    public bool IsRequired { get; set; } = true;
 
     [Parameter]
     public EventCallback<string?> ValueChanged { get; set; }

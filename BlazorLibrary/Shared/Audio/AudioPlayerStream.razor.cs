@@ -48,6 +48,7 @@ namespace BlazorLibrary.Shared.Audio
         public async Task SetUrlSound(string url, bool? isDeleteOld = true)
         {
             IsLoadAudio = true;
+            StateHasChanged();
             if (Blob != null && isDeleteOld == true)
             {
                 try
@@ -96,18 +97,20 @@ namespace BlazorLibrary.Shared.Audio
 
             length = await Http.GetLengthFileAsync(Blob);
 
+            IsLoadAudio = false;
+            StateHasChanged();
+
             if (length > 8000)
             {
                 IsSoundUrl = true;
-                await WaitSettingSound();
-            }
+                StateHasChanged();
+                await WaitSettingSound();                
+            }           
         }
 
 
         private async Task WaitSettingSound()
-        {
-            IsLoadAudio = false;
-            StateHasChanged();
+        {           
             await JSRuntime.InvokeVoidAsync("InitAudioPlayer", player, SettingSound.Interfece, SettingSound.SndLevel);
         }
     }

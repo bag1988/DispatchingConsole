@@ -1,4 +1,5 @@
 ﻿using Microsoft.JSInterop;
+using SensorM.GsoCore.SharedLibrary;
 using SharedLibrary.Models;
 using SharedLibrary.Utilities;
 using static BlazorLibrary.Shared.Main;
@@ -32,7 +33,17 @@ namespace DispatchingConsole.Client.Shared
         string NewIp = string.Empty;
 
         int StaffId = 0;
-        string? UserName { get; set; }
+        string? UserName
+        {
+            get
+            {
+                return _webRtc.UserName;
+            }
+            set
+            {
+                _webRtc.UserName = value;
+            }
+        }
         bool IsAdd = false;
 
         bool IsCreateConnect = false;
@@ -52,19 +63,30 @@ namespace DispatchingConsole.Client.Shared
             }
         }
 
-        protected override Task OnInitializedAsync()
+        protected override async Task OnInitializedAsync()
         {
             _ = JSRuntime.InvokeVoidAsync("Notification.requestPermission");
             var reference = DotNetObjectReference.Create(this);
             _ = JSRuntime.InvokeVoidAsync("CloseWindows", reference);
-            return base.OnInitializedAsync();
+
+            try
+            {
+                var _jsModele = await JSRuntime.InvokeAsync<IJSObjectReference>("import", $"./js/registerEventsForUploadFile.js?v={AssemblyNames.GetVersionPKO}");
+                await _jsModele.InvokeVoidAsync("registerEventsForUploadFile", "paste", "pastefiles");
+                await _jsModele.InvokeVoidAsync("registerEventsForUploadFile", "drop", "dropfiles");
+                await _jsModele.DisposeAsync();
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(@"Ошибка загрузки дополнительных модулей, {Message}", ex.Message);
+            }
         }
 
         IEnumerable<ContactInfo>? GetCuInfoList
         {
             get
             {
-                return _webRtc.ContactList.Where(x => (UserName != x.UserName | !IpAddressUtilities.CompareForAuthority(x.AuthorityUrl, MyNavigationManager.BaseUri)) && $"{x.Name} - {x.UserName}".Contains(SearchValue));
+                return _webRtc.ContactList.Where(x => (UserName != x.UserName | x.Type != TypeContact.Local) && $"{x.Name} - {x.UserName}".Contains(SearchValue)).OrderBy(x => x.Type).ThenBy(x => x.AuthorityUrl).ThenBy(x => x.UserName);
             }
         }
 
@@ -87,11 +109,10 @@ namespace DispatchingConsole.Client.Shared
         }
 
 
-        public async Task LoadFirstLevel(string userName)
+        public async Task LoadFirstLevel()
         {
             _webRtc.LoadConnectList = true;
             StaffId = await _User.GetLocalStaff();
-            UserName = userName;
 
             _webRtc.LoadConnectList = false;
         }
@@ -131,11 +152,11 @@ namespace DispatchingConsole.Client.Shared
             if (!string.IsNullOrEmpty(UserName) && !string.IsNullOrEmpty(NewConnectName) && SelectList?.Count > 0)
             {
                 var listConnect = SelectList.ToList();
-                if (!listConnect.Any(x => x.UserName == UserName && IpAddressUtilities.CompareForAuthority(MyNavigationManager.BaseUri, x.AuthorityUrl)))
-                    listConnect.Add(new ContactInfo(DispRep["YOU"], MyNavigationManager.BaseUri, UserName, StaffId));
+                if (!listConnect.Any(x => x.UserName == UserName && _webRtc.IsMyAuthorityUrl(x.AuthorityUrl)))
+                    listConnect.Add(new ContactInfo(DispRep["YOU"], _webRtc.MyAuthorityUrl, UserName, StaffId));
                 if (listConnect.Count > 0)
                 {
-                    var newConnect = new ChatInfo(NewConnectName, listConnect.Select(x => new ConnectInfo(x.AuthorityUrl, x.UserName)), IpAddressUtilities.GetAuthority(MyNavigationManager.BaseUri), UserName, false);
+                    var newConnect = new ChatInfo(NewConnectName, listConnect.Select(x => new ConnectInfo(x.AuthorityUrl, x.UserName)), IpAddressUtilities.GetAuthority(_webRtc.MyAuthorityUrl), UserName, false);
                     await _webRtc.SaveNewConnect(newConnect);
                     if (!ConnectList.Any(x => x.Key == newConnect.Key))
                         ConnectList.Add(newConnect);
