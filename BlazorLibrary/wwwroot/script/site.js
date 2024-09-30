@@ -3,6 +3,30 @@ function getCultureGlobal() {
   return window.localStorage['CultureGlobal'];
 };
 
+function getDomProperty(querySelector, prop) {
+  try {
+    let elem = document.querySelector(querySelector);
+    if (elem && (prop in elem)) {
+      return elem[prop];
+    }
+  }
+  catch (e) {
+    console.error("getDomProperty", e.message);
+  }
+}
+
+function setDomProperty(querySelector, prop, value) {
+  try {
+    let elem = document.querySelector(querySelector);
+    if (elem && (prop in elem)) {
+      elem[prop] = value;
+    }
+  }
+  catch (e) {
+    console.error("setDomProperty", e.message);
+  }
+}
+
 function setCultureGlobal(value) {
   window.localStorage['CultureGlobal'] = value;
 };
@@ -22,9 +46,31 @@ function ScrollToSelectElement(elem, querySelector) {
   }
 }
 
+function ScrollToSelectElementQuery(querySelector, options) {
+  if (!options) {
+    options = { block: "end" };
+  }
+  if (document.querySelector(querySelector)) {
+    document.querySelector(querySelector).scrollIntoView(options);
+  }
+}
+
+function GetUserAgent() {
+  return navigator.userAgent;
+}
+
 function GetBoundingClientRect(div) {
   if (div) {
     return div.getBoundingClientRect();
+  }
+  return null;
+}
+
+function GetBoundingClientRectForQuery(querySelector) {
+  if (querySelector) {
+    if (document.querySelector(querySelector)) {
+      return document.querySelector(querySelector).getBoundingClientRect();
+    }
   }
   return null;
 }
@@ -41,15 +87,42 @@ function GetWindowHeight(div) {
   return newHeight;
 }
 
-function CloseWindows(ref) {
+function AddCloseWindowsEvent() {
+  console.debug("Запуск прослушивания события закрытия окна");
+  window.addEventListener('beforeunload', CloseChildPage);
+}
+
+function RemoveCloseWindowsEvent() {
+  console.debug("Остановка прослушивания события закрытия окна");
+  window.removeEventListener('beforeunload', CloseChildPage);
+}
+
+function CloseChildPage(event) {
+  console.debug("Сработало событие закрытия окна");
+  // Отмените событие, как указано в стандарте.
+  event.preventDefault();
+  // Chrome требует установки возвратного значения.
+  event.returnValue = '';
+}
+
+function CloseWindows(data) {
+  window.addEventListener('beforeunload', (event) => {
+    console.debug("Приложение закрыто");
+    NavigatorSendBeacon(data);
+  });
+}
+
+function NavigatorSendBeacon(data) {
+  navigator.sendBeacon("/api/v1/allow/WriteLog",
+    new Blob([JSON.stringify(data)], {
+      type: 'application/json; charset=utf-8'
+    }));
+}
+
+function CloseWindowsEx(dotNetCallBack, methodName) {
   window.addEventListener('beforeunload', async (event) => {
-
-    await ref.invokeMethodAsync("CloseWindows");
-    // Отмените событие, как указано в стандарте.
-    event.preventDefault();
-    // Chrome требует установки возвратного значения.
-    event.returnValue = '';
-
+    console.debug("Сработало событие закрытия приложения");
+    await dotNetCallBack.invokeMethodAsync(methodName);
   });
 }
 
@@ -64,7 +137,7 @@ async function InitAudioPlayer(audio, deviceid, volum) {
           }
         }
         catch (e) {
-          console.log(e);
+          console.error(e);
         }
       }
       if (volum && volum > 0) {
@@ -75,7 +148,7 @@ async function InitAudioPlayer(audio, deviceid, volum) {
     }
   }
   catch (e) {
-    console.log(e);
+    console.error(e);
   }
 }
 
@@ -101,7 +174,7 @@ async function GetAudioTrack() {
     }
   }
   catch (e) {
-    console.log(e);
+    console.error(e);
   }
   return null;
 }
@@ -117,7 +190,7 @@ async function getEnumerateDevices() {
     return devices;
   }
   catch (e) {
-    console.log(e);
+    console.error(e);
   }
 }
 
@@ -215,7 +288,7 @@ var RecordAudio = {
           resolve(response);
         })
         .catch(async function (err) {
-          console.log(err.name + ": " + err.message);
+          console.error(err.name + ": " + err.message);
           RecordAudio.StopStream();
           await ref.invokeMethodAsync("ErrorRecord", err.message);
           resolve(null);
@@ -232,7 +305,7 @@ var RecordAudio = {
       }
     }
     catch (e) {
-      console.log(e);
+      console.error(e);
     }
     return false;
   },
@@ -297,7 +370,7 @@ function playSoundForUrl(url, isLoop) {
     return audio;
   }
   catch (e) {
-    console.log(e);
+    console.error(e);
   }
   return null;
 }
@@ -307,7 +380,7 @@ function RemoveBlob(blob) {
     URL.revokeObjectURL(blob);
   }
   catch {
-    console.log("Error RemoveBlob");
+    console.error("Error RemoveBlob");
   }
 }
 
@@ -319,7 +392,7 @@ function CreateObjUrl(elementInput) {
     }
     catch
     {
-      console.log("Ошибка получения файла");
+      console.error("Ошибка получения файла");
     }
   }
 }
@@ -383,7 +456,7 @@ var HotKeys = {
       }
       if ((HotKeys.KeyCurrent && !event.altKey && (event.keyCode == HotKeys.CodeArray.Enter || event.keyCode == HotKeys.CodeArray.Escape)) || (event.target.constructor != HTMLInputElement && event.target.constructor != HTMLTextAreaElement && event.target.constructor != HTMLSelectElement)) {
 
-        if (child && event.keyCode == HotKeys.CodeArray.Enter && (child.constructor == HTMLButtonElement || child.constructor == HTMLAnchorElement || child.classList.contains("bg-select") || child.classList.contains("bg-focus"))) {
+        if (child && event.keyCode == HotKeys.CodeArray.Enter && (child.constructor == HTMLTableSectionElement || child.constructor == HTMLButtonElement || child.constructor == HTMLAnchorElement || child.classList.contains("bg-select") || child.classList.contains("bg-focus"))) {
           return true;
         }
         else {

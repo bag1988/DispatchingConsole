@@ -11,11 +11,6 @@ using Microsoft.Extensions.Configuration;
 using System.Linq.Expressions;
 using LibraryProto.Helpers.V1;
 using FiltersGSOProto.V1;
-using Microsoft.Extensions.Hosting;
-using System.Reflection.Metadata;
-using System.Collections.Generic;
-
-
 namespace SensorM.GsoCommon.ServerLibrary.Services
 {
     public class PodsServiceV1 : PodsService.PodsServiceBase, IDisposable
@@ -141,13 +136,13 @@ namespace SensorM.GsoCommon.ServerLibrary.Services
                             if (filtr.DateCreate?.Count > 0)
                             {
                                 var member = Expression.PropertyOrField(modelType, nameof(ChatMessage.Date));
-                                var uintToStringExp = Expression.Call(typeof(PodsServiceV1), "TimeStampToTimeStampOnlyDate", null, member);
+                                var uintToStringExp = Expression.Call(typeof(PodsServiceV1), nameof(TimeStampToTimeStampOnlyDate), null, member);
                                 filter = filtr.DateCreate.CreateExpressionFromRepeatedDataOnly(uintToStringExp, filter);
                             }
                             if (filtr.TimeCreate?.Count > 0)
                             {
                                 var member = Expression.PropertyOrField(modelType, nameof(ChatMessage.Date));
-                                var uintToStringExp = Expression.Call(typeof(PodsServiceV1), "TimeStampToTimeOnly", null, member);
+                                var uintToStringExp = Expression.Call(typeof(PodsServiceV1), nameof(TimeStampToTimeOnly), null, member);
                                 filter = filtr.TimeCreate.CreateExpressionFromRepeatedTime(uintToStringExp, filter);
                             }
                             if (filtr.IsRecord != null)
@@ -415,7 +410,7 @@ namespace SensorM.GsoCommon.ServerLibrary.Services
                         response.Value = true;
                     }
 
-                    var updateData = _DbContext.SharedContact.AsEnumerable().Where(x => x.Type == TypeContact.Local).ExceptBy(request.List.Select(x => $"{x.NameCu}{x.AuthorityUrl}&{x.UserName}"), x => $"{x.NameCu}{x.AuthorityUrl}&{x.UserName}");
+                    var updateData = _DbContext.SharedContact.AsEnumerable().Where(x => x.Type == TypeContact.Local).ExceptBy(request.List.Select(x => $"{x.NameCu}{x.AuthorityUrl}&{x.UserName}&{x.LastActive?.ToDateTime()}"), x => $"{x.NameCu}{x.AuthorityUrl}&{x.UserName}&{x.LastActive?.ToDateTime()}");
 
                     if (updateData?.Any() ?? false)
                     {
@@ -431,6 +426,10 @@ namespace SensorM.GsoCommon.ServerLibrary.Services
                                 if (item.AuthorityUrl != first.AuthorityUrl)
                                 {
                                     _DbContext.Connects.Where(x => x.AuthorityUrl == item.AuthorityUrl && x.UserName == item.UserName).ExecuteUpdate(x => x.SetProperty(p => p.AuthorityUrl, first.AuthorityUrl));
+                                }
+                                if (item.LastActive != first.LastActive)
+                                {
+                                    item.LastActive = first.LastActive;
                                 }
                             }
                         }
@@ -510,7 +509,7 @@ namespace SensorM.GsoCommon.ServerLibrary.Services
             try
             {
                 var deleteData = _DbContext.SharedContact.AsEnumerable().Where(x => x.Type == TypeContact.Remote).ExceptBy(request.List, x => x.AuthorityUrl);
-                                
+
                 if (deleteData?.Any() ?? false)
                 {
                     _DbContext.SharedContact.RemoveRange(deleteData);

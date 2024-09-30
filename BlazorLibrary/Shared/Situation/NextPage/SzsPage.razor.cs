@@ -9,7 +9,6 @@ using SharedLibrary.GlobalEnums;
 using SMDataServiceProto.V1;
 using static BlazorLibrary.Shared.Main;
 using SharedLibrary.Interfaces;
-using LibraryProto.DerivedModels;
 using Microsoft.Extensions.Logging;
 
 namespace BlazorLibrary.Shared.Situation.NextPage
@@ -28,6 +27,9 @@ namespace BlazorLibrary.Shared.Situation.NextPage
         [Parameter]
         public bool? IsIndividualMode { get; set; } = false;
 
+        [Parameter]
+        public EventCallback CloseAllAction { get; set; }
+
         private List<CGetSitItemInfo>? SzsList { get; set; }
 
         private int interceptMode = 2;
@@ -36,7 +38,15 @@ namespace BlazorLibrary.Shared.Situation.NextPage
 
         private bool bPvsOn = false;
 
-        private int IDC_SIRENA_TYPE { get; set; } = 0;
+        private int IDC_SIRENA_TYPE
+        {
+            get
+            {
+                return Convert.ToInt32(Bits.LOWORD(ItemFirst.Param2) == 0x0FFF && IsIndividualMode == false && !bPvsOn && bSirenaOn);
+            }
+        }
+
+        bool bSirenaOn => Bits.CHECK_BIT(ItemFirst.Param1, 17);
 
         private CGetSitItemInfo? SelectItem = null;
 
@@ -106,7 +116,9 @@ namespace BlazorLibrary.Shared.Situation.NextPage
             StaffId = await _User.GetLocalStaff();
 
             if (ObjectList?.Any(x => x.DevType != SubsystemType.SUBSYST_PRD) ?? false)
+            {
                 SzsList = ObjectList.Where(x => x.DevType != SubsystemType.SUBSYST_PRD).ToList();
+            }
 
             await GetMsgList();
 
@@ -115,7 +127,9 @@ namespace BlazorLibrary.Shared.Situation.NextPage
             {
                 PrdItem = ObjectList.First(x => x.DevType == SubsystemType.SUBSYST_PRD);
                 if (PrdItem.MsgID > 0)
+                {
                     IsAllMsg = MsgList?.FirstOrDefault(x => x.OBJID.ObjID == PrdItem.MsgID)?.OBJID?.SubsystemID != SubsystemType.SUBSYST_SZS;
+                }
 
                 OldPrdItem = new(PrdItem);
                 m_CmdList = await GetCommandList(SubsystemType.SUBSYST_PRD);
@@ -124,9 +138,29 @@ namespace BlazorLibrary.Shared.Situation.NextPage
 
             if (SzsList != null)
             {
+                if (IsIndividualMode == true && SzsList.Any(x => x.Param2 == 0x0FFF)) // Если был включен режим звучания сирен "ВОЗДУШНАЯ ТРЕВОГА", то включить режим трансляции по каналу связи без сообщения
+                {
+                    SzsList.ForEach(x =>
+                    {
+                        x.Param1 = Bits.SET_BIT(ItemFirst.Param1, 18);
+                        x.MsgID = ItemFirst.MsgStaffID = 0;
+                        x.Param2 = Bits.MAKELONG(0, Bits.HIWORD(ItemFirst.Param2));// Установить номер фонограммы на ЭПУ
+                        x.Param1 = Bits.RESET_BIT(ItemFirst.Param1, 17);
+                    });
+                }
+                else if (IsIndividualMode == false && (SzsList.Any(x => (x.Param1 & 0xFFFF) != 0)))
+                {
+                    SzsList.ForEach(x =>
+                    {
+                        x.Param1 = 0;
+                    });
+                }
+
                 ItemFirst = new CGetSitItemInfo(SzsList.FirstOrDefault() ?? new());
                 if (ItemFirst.MsgID > 0)
+                {
                     IsAllMsg = MsgList?.FirstOrDefault(x => x.OBJID.ObjID == ItemFirst.MsgID)?.OBJID?.SubsystemID != SubsystemType.SUBSYST_SZS;
+                }
             }
             else
             {
@@ -141,14 +175,16 @@ namespace BlazorLibrary.Shared.Situation.NextPage
             interceptMode = Bits.CHECK_BIT(ItemFirst.Param1, 19) ? 0 : Bits.CHECK_BIT(ItemFirst.Param1, 20) ? 1 : 2;
             bPvsOn = Bits.LOWORD(ItemFirst.CmdParam) == 3000 && Bits.HIWORD(ItemFirst.CmdParam) == 6000;
 
-
-
             if (Bits.CHECK_BIT(ItemFirst.Param1, 18))
+            {
                 await GetMessageSize(ItemFirst.MsgID);
+            }
+
+
 
             IsLoadPage = false;
 
-            _ = _HubContext.SubscribeAsync(this);
+            _ = _HubContext.SubscribeAndStartAsync(this, typeof(IPubSubMethod));
         }
 
         [Description(DaprMessage.PubSubName)]
@@ -259,7 +295,7 @@ namespace BlazorLibrary.Shared.Situation.NextPage
             }
             else if (TypeButton == 1041/*IDC_ONSIRENA*/)
             {
-                if (!Bits.CHECK_BIT(ItemFirst.Param1, 17))
+                if (!bSirenaOn)
                     ItemFirst.Param1 = Bits.SET_BIT(ItemFirst.Param1, 17);
                 else
                 {
@@ -500,38 +536,45 @@ namespace BlazorLibrary.Shared.Situation.NextPage
         {
             int.TryParse(e.Value?.ToString(), out int TypeId);
 
-            IDC_SIRENA_TYPE = TypeId;
-
-            if (IDC_SIRENA_TYPE == 0)
-            { // Прерывистый режим сирены "ВНИМАНИЕ ВСЕМ"
-                var wPlateNum = ItemFirst.Param2; // Номер фонограммы с ЭПУ
-                if (ItemFirst.Param2 == 0x0FFF) // Если был включен режим звучания сирен "ВОЗДУШНАЯ ТРЕВОГА", то включить режим трансляции по каналу связи без сообщения
-                {
-                    ItemFirst.Param1 = Bits.SET_BIT(ItemFirst.Param1, 18);
-
-                    ItemFirst.MsgID = ItemFirst.MsgStaffID = 0;
-
-                    ItemFirst.Param2 = Bits.MAKELONG(0, Bits.HIWORD(ItemFirst.Param2));// Установить номер фонограммы на ЭПУ
-                }
-                else if (!Bits.CHECK_BIT(ItemFirst.Param1, 18))
-                { // Сообщение с ЭПУ
-                    if (wPlateNum <= 0)
-                    {
-                        wPlateNum = 1; // Минимальный номер фонограммы 1
-                    }
-                    else if (wPlateNum >= 0xFFF)
-                    {
-                        wPlateNum = 0x0FFE; // Максимальный номер фонограммы 4094
-                    }
-                    ItemFirst.Param2 = Bits.MAKELONG(wPlateNum, Bits.HIWORD(ItemFirst.Param2));// Установить номер фонограммы на ЭПУ
-                }
+            if (TypeId == 0)
+            {
+                SetAirAlertAttentionEveryone();
             }
-            else if (IDC_SIRENA_TYPE == 1)
+            else if (TypeId == 1)
             { // Непрерывный режим сирены "ВОЗДУШНАЯ ТРЕВОГА"
+                ItemFirst.MsgID = ItemFirst.MsgStaffID = 0;
+                ItemFirst.CmdParam = Bits.MAKELONG(Bits.LOWORD(ItemFirst.CmdParam), 0);//обнуляем длительность сообщения
                 ItemFirst.Param1 = Bits.RESET_BIT(ItemFirst.Param1, 18);
                 ItemFirst.Param2 = Bits.MAKELONG(0x0FFF, Bits.HIWORD(ItemFirst.Param2));// Установить "СПЕЦИАЛИЗИРОВАННЫЙ" номер фонограммы на ЭПУ
             }
+        }
 
+        /// <summary>
+        /// Прерывистый режим сирены "ВНИМАНИЕ ВСЕМ"
+        /// </summary>
+        void SetAirAlertAttentionEveryone()
+        {
+            var wPlateNum = ItemFirst.Param2; // Номер фонограммы с ЭПУ
+            if (ItemFirst.Param2 == 0x0FFF) // Если был включен режим звучания сирен "ВОЗДУШНАЯ ТРЕВОГА", то включить режим трансляции по каналу связи без сообщения
+            {
+                ItemFirst.Param1 = Bits.SET_BIT(ItemFirst.Param1, 18);
+
+                ItemFirst.MsgID = ItemFirst.MsgStaffID = 0;
+
+                ItemFirst.Param2 = Bits.MAKELONG(0, Bits.HIWORD(ItemFirst.Param2));// Установить номер фонограммы на ЭПУ
+            }
+            else if (!Bits.CHECK_BIT(ItemFirst.Param1, 18))
+            { // Сообщение с ЭПУ
+                if (wPlateNum <= 0)
+                {
+                    wPlateNum = 1; // Минимальный номер фонограммы 1
+                }
+                else if (wPlateNum >= 0xFFF)
+                {
+                    wPlateNum = 0x0FFE; // Максимальный номер фонограммы 4094
+                }
+                ItemFirst.Param2 = Bits.MAKELONG(wPlateNum, Bits.HIWORD(ItemFirst.Param2));// Установить номер фонограммы на ЭПУ
+            }
         }
 
         private async Task<int> GetCmdID()
@@ -570,9 +613,11 @@ namespace BlazorLibrary.Shared.Situation.NextPage
             }
 
             if (MsgList == null)
+            {
                 MsgList = new();
+            }
 
-            MsgList.RemoveAll(x => x.OBJID == null || x.Type == (int)MessageType.MessageText);
+            MsgList.RemoveAll(x => x.OBJID == null);
         }
 
         private async Task Next()
@@ -583,31 +628,46 @@ namespace BlazorLibrary.Shared.Situation.NextPage
             }
             else if (IsIndividualMode == true)
             {
-                if (SzsList != null && !ZoneList.Any())
+                if (SzsList?.All(x => x.CmdParam > 0 || Bits.LOWORD(x.Param2) > 0) ?? false)
                 {
-                    if (SzsList.Any(x => x.ZoneCount == 0 && x.SZSGroupID == 0))
+                    if (SzsList != null && !ZoneList.Any())
                     {
-                        var r = await GetZonesCount();
-
-                        if (r.Any())
+                        if (SzsList.Any(x => x.ZoneCount == 0 && x.SZSGroupID == 0))
                         {
-                            foreach (var item in SzsList.Where(x => x.ZoneCount == 0 && x.SZSGroupID == 0))
+                            var r = await GetZonesCount();
+
+                            if (r.Any())
                             {
-                                item.ZoneCount = r.FirstOrDefault(x => x.DevID == item.SZSDevID)?.ZoneCount ?? 15;
+                                foreach (var item in SzsList.Where(x => x.ZoneCount == 0 && x.SZSGroupID == 0))
+                                {
+                                    item.ZoneCount = r.FirstOrDefault(x => x.DevID == item.SZSDevID)?.ZoneCount ?? 15;
+                                }
                             }
                         }
+                        foreach (var item in SzsList.Where(x => x.SZSDevID > 0 && x.SZSGroupID == 0))
+                        {
+                            ZoneList.AddRange(await GetZonesInfo(new OBJ_ID() { ObjID = item.SZSDevID, StaffID = item.SZSDevStaffID }));
+                        }
                     }
-                    foreach (var item in SzsList.Where(x => x.SZSDevID > 0 && x.SZSGroupID == 0))
-                    {
-                        ZoneList.AddRange(await GetZonesInfo(new OBJ_ID() { ObjID = item.SZSDevID, StaffID = item.SZSDevStaffID }));
-                    }
-                }
 
-                IsNext = true;
+                    IsNext = true;
+                }
+                else
+                {
+                    MessageView?.AddError("", UUZSRep["ERROR_SZS_MSG"]);
+                }
             }
             else
             {
                 await SaveSzs();
+            }
+        }
+
+        private async Task Close()
+        {
+            if (CloseAllAction.HasDelegate)
+            {
+                await CloseAllAction.InvokeAsync();
             }
         }
 
@@ -661,7 +721,7 @@ namespace BlazorLibrary.Shared.Situation.NextPage
         }
 
         private async Task SaveSzs()
-        {            
+        {
             try
             {
                 var CmdID = await GetCmdID();
@@ -733,8 +793,8 @@ namespace BlazorLibrary.Shared.Situation.NextPage
                             });
                         }
                         await SaveSit(ObjectList);
-                    }                   
-                }                
+                    }
+                }
             }
             catch (Exception ex)
             {
@@ -798,22 +858,27 @@ namespace BlazorLibrary.Shared.Situation.NextPage
             // ПРОВЕРКА на непротиворечивость введенных данных
 
             // 2 минуты 45 секунд
-            if (Bits.CHECK_BIT(ItemFirst.Param1, 17) && Bits.LOWORD(ItemFirst.CmdParam) / 20 > 165)
+            if (bSirenaOn && Bits.LOWORD(ItemFirst.CmdParam) / 20 > 165)
             {
 
                 WARNING_LENGTH_TIME_SIRENA = 1;
 
+                StateHasChanged();
+
                 while (WARNING_LENGTH_TIME_SIRENA == 1)
                 {
-                    await Task.Delay(100);
+                    await Task.Delay(10);
                 }
 
                 if (WARNING_LENGTH_TIME_SIRENA == 2)
                 {
                     WARNING_LENGTH_TIME_SIRENA = 0;
+                    StateHasChanged();
                 }
                 else
+                {
                     return false;
+                }
             }
 
             if (IsIndividualMode == true)

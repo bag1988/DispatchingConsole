@@ -1,7 +1,4 @@
-﻿
-using System.Net.Http.Headers;
-using System.Net.Http.Json;
-using System.Text.RegularExpressions;
+﻿using System.Net.Http.Json;
 using System.Timers;
 using BlazorLibrary.Helpers;
 using BlazorLibrary.Shared.Modal;
@@ -9,17 +6,18 @@ using Microsoft.AspNetCore.Components;
 using Microsoft.JSInterop;
 using SharedLibrary.GlobalEnums;
 using SharedLibrary.Models;
-using SharedLibrary.Utilities;
 using SharedLibrary;
-using System.ComponentModel;
-using SharedLibrary.Interfaces;
 using System.Web;
 using Microsoft.Extensions.Logging;
 using Microsoft.AspNetCore.Components.Routing;
+using SMDataServiceProto.V1;
+using Google.Protobuf.WellKnownTypes;
+using SensorM.GsoCore.SharedLibrary;
+using Microsoft.AspNetCore.SignalR.Client;
 
 namespace BlazorLibrary.Shared
 {
-    partial class Main : IAsyncDisposable, IPubSubMethod
+    partial class Main : IAsyncDisposable
     {
         [Parameter]
         public RenderFragment? ChildContent { get; set; }
@@ -35,115 +33,271 @@ namespace BlazorLibrary.Shared
 
         public ConfigStart ConfStart = new();
 
+        AppPorts AppPortsInfo { get; set; } = new();
+
         int SystemId => ParseUrlSegments.GetSystemId(MyNavigationManager.Uri);
 
         public static MessageViewList? MessageView = default!;
 
         bool isPageLoad = false;
 
-        bool IsLoadRemoteAuth = false;
+        readonly System.Timers.Timer timer = new(TimeSpan.FromMinutes(1));
+
+        public static uint MinTimeoutLoad = 10;
+
+        private bool _newVersionAvailable = false;
+        private bool _browserIsFoundNewVersionAvailable = false;
+
+        bool IsUpdateServiceWorker = false;
+
+        DateTime sendLastActive = DateTime.Now;
+
+        private ProductVersion? PVersion = null;
+
+        private bool CollapseNavMenu = true;
+
+        const int MaxNumberAttempsUpdate = 20;
+        int NumberAttempsUpdate = MaxNumberAttempsUpdate;
 
         protected override async Task OnInitializedAsync()
         {
-            ConfStart = await GetConfStart();
+            try
+            {
+                await CheckUpdate();
+                //init hub
+                await InitAuthHubContext();
 
-            CheckSubSystemId();
+                await GetTimeLoadConnections();
 
-            await CheckQuery();
+                //проверка авторизации приложения
+                await CheckAuthenticationApp();
 
-            IsLoadRemoteAuth = false;
-            StateHasChanged();
+                //настройки разрешенных подсистем
+                ConfStart = await GetConfStart();
 
-            await CheckUser();
+                //проверка активной подсистемы
+                CheckSubSystemId();
 
-            MyNavigationManager.LocationChanged += MyNavigationManager_LocationChanged;
+                //проверка входящей строки
+                await CheckQuery();
 
-            await JSRuntime.InvokeVoidAsync("HotKeys.ListenWindowKey");
+                StateHasChanged();
 
-            _ = _HubContext.SubscribeAsync(this);
+                MyNavigationManager.LocationChanged += MyNavigationManager_LocationChanged;
+
+                await JSRuntime.InvokeVoidAsync("HotKeys.ListenWindowKey");
+
+                if (timer != null)
+                {
+                    timer.Elapsed += Timer_Elapsed;
+                    timer.Start();
+                }
+                isPageLoad = true;
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError("Ошибка инициализации, {message}", ex.Message);
+            }
         }
 
-        [Description(DaprMessage.PubSubName)]
-        public Task Fire_RestartUi(string? value)
+        private void ToggleNavMenu()
         {
-            _logger.LogTrace("Restart Ui");
-            if (isPageLoad)
-            {
-                MyNavigationManager.NavigateTo($"/{SystemId}/", true, true);
-            }
-            _HubContext.SetFuncForReconnect(null);
-            return Task.CompletedTask;
+            CollapseNavMenu = !CollapseNavMenu;
         }
 
-        [Description(DaprMessage.PubSubName)]
-        public async Task Fire_AllUserLogout(string? str)
+        async Task CheckUpdateServiceWorker()
         {
-            _logger.LogTrace("All users logout");
-            if (!string.IsNullOrEmpty(str))
+            try
             {
-                MessageView?.AddError("", str);
-            }
-            await AuthenticationService.Logout();
+                if (!_newVersionAvailable || !_browserIsFoundNewVersionAvailable)
+                {
+                    _browserIsFoundNewVersionAvailable = await JSRuntime.InvokeAsync<bool>("checkUpdateServiceWorker");
+                    //_logger.LogTrace("Получен ответ на проверку наличия обновления, есть обновление {result}", _browserIsFoundNewVersionAvailable);
+                    if (_browserIsFoundNewVersionAvailable)
+                    {
+                        _logger.LogTrace("Отображаем кнопку обновления");
+                        _newVersionAvailable = true;
+                        StateHasChanged();
+                    }
+                    else
+                    {
+                        TimeSpan delay = NumberAttempsUpdate switch
+                        {
+                            > 17 => TimeSpan.FromSeconds(2),
+                            > 13 => TimeSpan.FromSeconds(5),
+                            > 8 => TimeSpan.FromSeconds(10),
+                            _ => TimeSpan.FromSeconds(30)
+                        };
 
-            _HubContext.SetFuncForReconnect(Fire_RestartUi);
+                        if (NumberAttempsUpdate < 10 && _authHubContext != null && _authHubContext.State != HubConnectionState.Connected)
+                        {
+                            NumberAttempsUpdate = MaxNumberAttempsUpdate;
+                            return;
+                        }
+
+                        await Task.Delay(delay);
+                        NumberAttempsUpdate--;
+                        if (NumberAttempsUpdate == 0)
+                        {
+                            NumberAttempsUpdate = MaxNumberAttempsUpdate;
+                            return;
+                        }
+                        _logger.LogTrace("Попытка № {value} проверки обновления", MaxNumberAttempsUpdate - NumberAttempsUpdate);
+                        _ = CheckUpdateServiceWorker();
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError("Ошибка проверки обновления {message}", ex.Message);
+            }
+        }
+
+        private async Task PVersionFull()
+        {
+            try
+            {
+                var result = await Http.PostAsync("api/v1/allow/PVersionFull", null);
+                if (result.IsSuccessStatusCode)
+                {
+                    PVersion = await result.Content.ReadFromJsonAsync<ProductVersion>();
+                }
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine(ex.Message);
+            }
+        }
+
+        async Task<bool> CheckUpdate()
+        {
+            await PVersionFull();
+            if (_authHubContext?.State == HubConnectionState.Connected && PVersion?.BuildNumber != GetVersionUi)
+            {
+                _logger.LogTrace("Серверная и клиентская версия отличается, отображаем кнопку обновления");
+                _newVersionAvailable = true;
+                StateHasChanged();
+                return true;
+            }
+            return false;
+        }
+
+
+        string? GetVersionUi
+        {
+            get
+            {
+                return AssemblyNames.GetVersionPKO;
+            }
+        }
+
+
+        public async Task OnFullRefreshPage()
+        {
+            _logger.LogTrace("Получена команда на полную перезагрузку страницы");
+            timer.Stop();
+            await JSRuntime.InvokeVoidAsync("window.location.reload");
+            IsUpdateServiceWorker = false;
+        }
+
+        async Task UpdateServiceWorker()
+        {
+            IsUpdateServiceWorker = true;
+            try
+            {
+                var countAttempts = 1;
+
+                while (countAttempts < 4)
+                {
+                    var result = await JSRuntime.InvokeAsync<bool>("sendSkipWaitingServiceWorker");
+                    if (!result)
+                    {
+                        if (new Uri(MyNavigationManager.Uri).Scheme == "http")
+                        {
+                            MyNavigationManager.Refresh(true);
+                            return;
+                        }
+                        _logger.LogTrace($"Ошибка обновления, попытка № {countAttempts}");
+                        countAttempts++;
+                        await JSRuntime.InvokeAsync<bool>("checkUpdateServiceWorker");
+                        await Task.Delay(1000);
+                    }
+                    else
+                    {
+                        return;
+                    }
+                }
+                var unRegister = await JSRuntime.InvokeAsync<bool>("unregisterServiceWorker");
+                if (unRegister)
+                {
+                    return;
+                }
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError("Ошибка пропуска ожидания обновления {message}", ex.Message);
+            }
+            MessageView?.AddError("", GsoRep["ERROR_UPDATE_UI"]);
+        }
+
+        private async void Timer_Elapsed(object? sender, ElapsedEventArgs e)
+        {
+            timer.Stop();
+            try
+            {
+                if (_authHubContext?.State == HubConnectionState.Connected)
+                {
+                    await RefreshToken();
+                }
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError("Ошибка проверки необходимости обновления токена, {message}", ex.Message);
+            }
+            timer.Start();
         }
 
         private void MyNavigationManager_LocationChanged(object? sender, LocationChangedEventArgs e)
         {
             CheckSubSystemId();
+            if (!CollapseNavMenu)
+            {
+                CollapseNavMenu = true;
+                StateHasChanged();
+            }
         }
 
-        private async Task CheckUser()
+        private async Task CheckAuthenticationApp()
         {
             try
             {
                 var s = await _localStorage.GetTokenAsync();
-                bool isCheckUser = false;
-                if (!string.IsNullOrEmpty(s))
-                {
-                    if (Http.DefaultRequestHeaders.Authorization == null)
-                        Http.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue(MetaDataName.Bearer, s);
+                _logger.LogTrace("Проверка наличия токена");
 
-                    var result = await Http.PostAsJsonAsync("api/v1/allow/CheckUser", s);
-                    if (result.IsSuccessStatusCode)
-                    {
-                        isCheckUser = await result.Content.ReadFromJsonAsync<bool>();
-                    }
+                if (string.IsNullOrEmpty(s))
+                {
+                    _logger.LogTrace("Токен не установлен");
                 }
 
-                if (!isCheckUser)
+                _logger.LogTrace("Отправка запроса на проверку авторизации приложения");
+
+                var result = await InvokeToAuthHub<string?>("CheckAuthenticationApp", [s]);
+
+                if (string.IsNullOrEmpty(result) && !string.IsNullOrEmpty(s))
                 {
-                    await AuthenticationService.Logout();
+                    _logger.LogTrace("Токен не актуален, выход пользователя");
+                    await LogoutUser();
                 }
-                else
+                else if (!string.IsNullOrEmpty(result))
                 {
-                    _ = RefreshToken();
+                    _logger.LogTrace("Приложение авторизовано, обновляем токен");
+                    await SetTokenAsync(result);
                 }
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex.Message);
+                _logger.LogError("Ошибка проверки пользователя, {message}", ex.Message);
             }
-
-            isPageLoad = true;
-        }
-
-        async Task<string?> IsNeedRefreshToken()
-        {
-            var user = await AuthenticationService.GetUser();
-            if (user != null && !string.IsNullOrEmpty(user.Identity?.Name))
-            {
-                if (await CheckOldActive())
-                {
-                    var exp = user.FindFirst(c => c.Type.Equals("exp"))?.Value;
-                    var expTime = DateTimeOffset.FromUnixTimeSeconds(Convert.ToInt64(exp));
-
-                    var now = DateTimeOffset.UtcNow;
-                    if (expTime.AddMinutes(-10).CompareTo(now) < 0)
-                        return user.Identity?.Name;
-                }
-            }
-            return null;
         }
 
         async Task RefreshToken()
@@ -151,61 +305,49 @@ namespace BlazorLibrary.Shared
             try
             {
                 string userName = "";
+                _logger.LogTrace("Проверка необходимости обновления токена");
                 userName = await IsNeedRefreshToken() ?? "";
                 if (!string.IsNullOrEmpty(userName))
                 {
-                    string urlRefresh = "api/v1/allow/RefreshUser";
-
-                    //Обновляем токен
-                    var result = await Http.PostAsJsonAsync(urlRefresh, userName);
-                    if (result.IsSuccessStatusCode)
-                    {
-                        var token = await result.Content.ReadAsStringAsync();
-                        if (!string.IsNullOrEmpty(token))
-                        {
-                            var claims = JwtParser.ParseIEnumerableClaimsFromJwt(token);
-                            var newUserName = new AuthorizUser(claims).UserName;
-
-                            if (newUserName != userName)
-                            {
-                                await AuthenticationService.Logout();
-                            }
-                            else
-                            {
-                                await AuthenticationService.SetTokenAsync(token);
-                            }
-                        }
-                        else
-                        {
-                            await AuthenticationService.Logout();
-                        }
-                    }
+                    await SendRefreshToken(userName);
                 }
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex.Message);
+                _logger.LogError("Ошибка проверки токена, {message}", ex.Message);
             }
-            await Task.Delay(TimeSpan.FromSeconds(30));
-
-            _ = RefreshToken();
         }
 
-        async Task<bool> CheckOldActive()
+        async Task<string?> IsNeedRefreshToken()
         {
-            var dateTime = await _localStorage.GetLastActiveDateAsync();
-            if (dateTime == null || dateTime?.AddHours(1).CompareTo(DateTime.Now) < 0)
+            var user = (await _authStateProvider.GetAuthenticationStateAsync()).User;
+            _logger.LogTrace("Пользователь {user}", user?.Identity?.Name ?? "не авторизован");
+            if (user != null && !string.IsNullOrEmpty(user.Identity?.Name))
             {
-                await AuthenticationService.Logout();
-                return false;
-            }
+                var exp = user.FindFirst(c => c.Type.Equals("exp"))?.Value;
+                var expTime = DateTimeOffset.FromUnixTimeSeconds(Convert.ToInt64(exp));
 
-            return true;
+                var now = DateTimeOffset.UtcNow;
+                if (expTime.AddMinutes(-10).CompareTo(now) < 0)
+                {
+                    _logger.LogTrace("Истекло время действия токена для пользователя {user}", user.Identity.Name);
+                    return user.Identity.Name;
+                }
+            }
+            return null;
         }
 
-        void OnSetActive()
+        async Task OnSetActive()
         {
-            _ = _localStorage.SetLastActiveDateAsync(DateTime.Now);
+            if (sendLastActive.AddSeconds(20).CompareTo(DateTime.Now) <= 0)
+            {
+                _logger.LogTrace("SetLastActive {value}", sendLastActive);
+                sendLastActive = DateTime.Now;
+                if (await _User.GetName() != null)
+                {
+                    await SendToAuthHub("SetLastActive");
+                }
+            }
         }
 
         private async Task<ConfigStart> GetConfStart()
@@ -229,69 +371,93 @@ namespace BlazorLibrary.Shared
         {
             try
             {
-                if (MyNavigationManager.Uri.Contains("token=") || MyNavigationManager.Uri.Contains("systemId=") || MyNavigationManager.Uri.Contains("user="))
+                if (MyNavigationManager.Uri.Contains("systemId=") || MyNavigationManager.Uri.Contains("user=") || MyNavigationManager.Uri.Contains("token="))
                 {
                     var _url = new Uri(MyNavigationManager.Uri);
 
                     var queryList = HttpUtility.ParseQueryString(_url.Query);
-
+                    var navigateTo = ParseUrlSegments.AbsolutePath(MyNavigationManager.Uri);
                     if (queryList?.Count > 0)
                     {
-                        IsLoadRemoteAuth = true;
+                        var remoteUser = queryList.Get("user");
+
+                        if (!string.IsNullOrEmpty(remoteUser))
+                        {
+                            var currentUser = await _User.GetName();
+
+                            if (remoteUser != currentUser)
+                            {
+                                _logger.LogTrace("Удаленный пользователь {remote} не соответствует текущему {current}", remoteUser, currentUser);
+                                if (!string.IsNullOrEmpty(currentUser))
+                                {
+                                    _logger.LogTrace("Выход приложения");
+                                    await LogoutUser();
+                                    await Task.Delay(1000);
+                                }
+                                var remotePassword = queryList.Get("password");
+
+                                if (!string.IsNullOrEmpty(remoteUser))
+                                {
+                                    _logger.LogTrace("Авторизация удаленного пользователя");
+                                    await AuthorizeRemoteUser(new() { User = remoteUser, Password = remotePassword });
+                                }
+                            }
+                        }
+
+                        var token = queryList.Get("token");
+
+                        if (!string.IsNullOrEmpty(token))
+                        {
+                            try
+                            {
+                                var remoteLogin = RemoteAuthorizeHelper.ParseToken(token);
+                                if (remoteLogin != null)
+                                {
+                                    var currentUser = await _User.GetName();
+
+                                    if (remoteLogin.User != currentUser)
+                                    {
+                                        _logger.LogTrace("Удаленный пользователь {remote} не соответствует текущему {current}", remoteLogin.User, currentUser);
+                                        if (!string.IsNullOrEmpty(currentUser))
+                                        {
+                                            _logger.LogTrace("Выход приложения");
+                                            await LogoutUser();
+                                            await Task.Delay(1000);
+                                        }
+                                        _logger.LogTrace("Авторизация удаленного пользователя");
+                                        await AuthorizeRemoteUser(remoteLogin);
+                                    }
+                                }
+                            }
+                            catch (Exception eParse)
+                            {
+                                _logger.LogTrace("Ошибка разбора токена для авторизации {value}", eParse.Message);
+                            }
+                        }
 
                         var newSystemId = queryList.Get("systemId");
+
                         if (!string.IsNullOrEmpty(newSystemId))
                         {
-                            int.TryParse(newSystemId, out int SystemID);
-                            if (SystemID >= SubsystemType.SUBSYST_ASO && SystemID <= SubsystemType.SUBSYST_P16x)
+                            _logger.LogTrace("Установка новой подсистемы {system}", newSystemId);
+                            int.TryParse(newSystemId, out var systemID);
+                            if (systemID >= SubsystemType.SUBSYST_ASO && systemID <= SubsystemType.SUBSYST_P16x && CheckSubsystemId(systemID))
                             {
+                                Http.DefaultRequestHeaders.AddHeader(CookieName.SubsystemID, systemID.ToString());
                                 var viewstatnotify = queryList.Get("viewstatnotify");
                                 if (!string.IsNullOrEmpty(viewstatnotify))
                                 {
-                                    Http.DefaultRequestHeaders.AddHeader(CookieName.SubsystemID, SystemID.ToString());
-                                    MyNavigationManager.NavigateTo($"/{SystemID}/Index/viewstatnotify");
+                                    navigateTo = $"/{systemID}/Index/viewstatnotify";
                                 }
                             }
-                        }
-                        else
-                        {
-                            MyNavigationManager.NavigateTo(ParseUrlSegments.AbsolutePath(MyNavigationManager.Uri));
-                        }
-
-
-                        var newToken = queryList.Get("token");
-                        if (!string.IsNullOrEmpty(newToken))
-                        {
-                            if (await _User.GetUserId() > 0)
+                            else
                             {
-                                await AuthenticationService.Logout();
-                            }
-                            queryList.Remove("token");
-
-                            await AuthenticationService.SetTokenAsync(newToken);
-                        }
-                        else
-                        {
-                            var newUser = queryList.Get("user");
-
-                            if (!string.IsNullOrEmpty(newUser))
-                            {
-                                if (await _User.GetUserId() > 0)
-                                {
-                                    await AuthenticationService.Logout();
-                                }
-                                queryList.Remove("user");
-
-                                var newPassword = queryList.Get("password");
-
-                                if (!string.IsNullOrEmpty(newUser))
-                                {
-                                    queryList.Remove("password");
-
-                                    await AuthenticationService.RemoteLogin(new() { User = newUser, Password = newPassword });
-                                }
+                                _logger.LogTrace("Подсистема запрещена {system}", systemID);
                             }
                         }
+                        _logger.LogTrace("Перенаправление по новому адресу {value}", navigateTo);
+
+                        MyNavigationManager.NavigateTo(navigateTo);
                     }
                 }
             }
@@ -303,7 +469,31 @@ namespace BlazorLibrary.Shared
 
         void CheckSubSystemId()
         {
-            int response = SystemId;
+            if (!CheckSubsystemId(SystemId))
+            {
+                _logger.LogTrace("Подсистема {id} запрещена", SystemId);
+                MyNavigationManager.NavigateTo($"/", true, true);
+            }
+        }
+
+        private async Task GetTimeLoadConnections()
+        {
+            var result = await Http.PostAsJsonAsync("api/v1/GetParams", new StringValue() { Value = nameof(ParamsAuthorize.TimeLoadConnections) });
+            if (result.IsSuccessStatusCode)
+            {
+                var g = await result.Content.ReadFromJsonAsync<StringValue>() ?? new();
+                uint.TryParse(g.Value, out var response);
+                if (response == 0)
+                {
+                    response = 10;
+                }
+                MinTimeoutLoad = response;
+            }
+        }
+
+        bool CheckSubsystemId(int systemId)
+        {
+            int response = systemId;
             if (!ConfStart.ASO && response == SubsystemType.SUBSYST_ASO)
             {
                 response = ConfStart.UUZS ? SubsystemType.SUBSYST_SZS : ConfStart.STAFF ? SubsystemType.SUBSYST_GSO_STAFF : 0;
@@ -321,17 +511,22 @@ namespace BlazorLibrary.Shared
                 response = ConfStart.ASO ? SubsystemType.SUBSYST_ASO : ConfStart.UUZS ? SubsystemType.SUBSYST_SZS : ConfStart.STAFF ? SubsystemType.SUBSYST_GSO_STAFF : 0;
             }
 
-            if (SystemId != response)
-            {
-                _logger.LogTrace("Подсистема {id} запрещена", SystemId);
-                MyNavigationManager.NavigateTo($"/{response}/", true, true);
-            }
+            return systemId == response;
         }
 
-        public ValueTask DisposeAsync()
+
+        public async ValueTask DisposeAsync()
         {
             MyNavigationManager.LocationChanged -= MyNavigationManager_LocationChanged;
-            return _HubContext.DisposeAsync();
+            timer.Stop();
+            timer.Dispose();
+
+            if (timerLoadAccess != null)
+            {
+                timerLoadAccess.Stop();
+                timerLoadAccess.Dispose();
+            }
+            await DisposeAuthHubAsync();
         }
     }
 }

@@ -5,7 +5,7 @@
     <div class="row mb-2">
         <label class="form-label col-md-4">@AsoRep["AlertMode"]</label>
         <div class="col-md-8">
-            <select class="form-select" @bind="SubParam.Call4AllShedule">
+            <select class="form-select" @bind="SubParam.Call4AllShedule" @bind:after="CallEvent">
                 <option value="0">@GsoRep["IDS_STRING_NOTIFY_MODE_1"]</option>
                 <option value="1">@GsoRep["IDS_STRING_NOTIFY_MODE_2"]</option>
                 <option value="2">@GsoRep["IDS_STRING_NOTIFY_MODE_3"]</option>
@@ -14,7 +14,7 @@
             </select>
             @if (SubParam.Call4AllShedule != 1)
             {
-                <label class="form-check-label me-3"><input type="checkbox" class="form-check-input me-2" checked="@(SubParam.AllowTTS==1? "checked": null)" @onchange="(e)=>{SubParam.AllowTTS=(bool)(e.Value??false)?1:0;}" />@AsoRep["TextToAudio"]</label>
+                <label class="form-check-label me-3"><input type="checkbox" class="form-check-input me-2" @bind="AllowTTS" @bind:after="CallEvent" />@AsoRep["TextToAudio"]</label>
             }
         </div>
     </div>
@@ -24,9 +24,36 @@ else
     <PLoad />
 }
 
-
-
 @code {
     [Parameter]
     public SubsystemParam? SubParam { get; set; }
+
+    [Parameter]
+    public EventCallback CallEventChange { get; set; }
+
+    bool AllowTTS
+    {
+        get
+        {
+            return SubParam?.AllowTTS == 1 ? true : false;
+        }
+        set
+        {
+            if (SubParam != null)
+            {
+                SubParam.AllowTTS = value ? 1 : 0;
+            }
+        }
+    }
+
+
+    async Task CallEvent()
+    {
+        if (CallEventChange.HasDelegate)
+        {
+            await CallEventChange.InvokeAsync();
+        }
+    }
+
+
 }

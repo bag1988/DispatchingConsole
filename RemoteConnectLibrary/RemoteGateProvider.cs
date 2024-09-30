@@ -1,6 +1,7 @@
 ﻿using Grpc.Core;
 using Grpc.Core.Interceptors;
 using Grpc.Net.Client;
+using Microsoft.Extensions.Logging;
 using SharedLibrary;
 using SharedLibrary.GlobalEnums;
 using SharedLibrary.Utilities;
@@ -12,6 +13,12 @@ namespace RemoteConnectLibrary
     public class RemoteGateProvider
     {
         private readonly Dictionary<string, GateClients> _clients = new();
+        readonly ILogger<RemoteGateProvider> _logger;
+
+        public RemoteGateProvider(ILogger<RemoteGateProvider> logger)
+        {
+            _logger = logger;
+        }
 
         private class GateClients
         {
@@ -20,14 +27,9 @@ namespace RemoteConnectLibrary
                 Channel = channel;
                 MetaDataClient = metaDataClient;
             }
-            //public GateClients(GrpcChannel channel, GateServiceClient client, Metadata? metaDataClient)
-            //{
-            //    Channel = channel;
-            //    Client = client;
-            //    MetaDataClient = metaDataClient;
-            //}
+
             public GrpcChannel Channel { get; init; }
-            //public GateServiceClient Client { get; init; }
+
             public Metadata? MetaDataClient { get; set; }
         }
 
@@ -68,36 +70,47 @@ namespace RemoteConnectLibrary
         {
             lock (_clients)
             {
-                if (!_clients.ContainsKey(baseUri))
+                try
                 {
-                    GrpcChannel channel = CreateChannel(baseUri);
-
-                    if (!metaData?.Any(x => x.Key == MetaDataName.DaprAppId) ?? true)
+                    if (!_clients.ContainsKey(baseUri))
                     {
-                        if (metaData == null)
-                            metaData = new();
-                        metaData.Add(new(MetaDataName.DaprAppId, DaprNameService.ServerGRPCSMGATE));
+                        GrpcChannel channel = CreateChannel(baseUri);
+
+                        if (!metaData?.Any(x => x.Key == MetaDataName.DaprAppId) ?? true)
+                        {
+                            if (metaData == null)
+                                metaData = new();
+                            metaData.Add(new(MetaDataName.DaprAppId, DaprNameService.ServerGRPCSMGATE));
+                        }
+
+                        if (metaData.All(x => x.Key != MetaDataName.DaprStream))
+                        {
+                            metaData.Add(new Metadata.Entry(MetaDataName.DaprStream, "true"));
+                        }
+
+                        GateClients client = new(channel, metaData);
+
+                        _clients.Add(baseUri, client);
                     }
-                    //GateClients client = new(channel, new GateServiceClient(GetCallInvoker(channel, baseUri)), metaData);
-                    GateClients client = new(channel, metaData);
+                    else
+                    {
+                        AddMetaData(baseUri, metaData);
+                    }
 
-                    _clients.Add(baseUri, client);
+                    var connect = _clients[baseUri].Channel.ConnectAsync(default).Wait(1000);
+
+                    _logger.LogTrace(@"{url} состояние канала: {state}", baseUri, _clients[baseUri].Channel.State);
+                    if (_clients[baseUri].Channel.State == ConnectivityState.Ready)
+                    {
+                        return new GateServiceClient(GetCallInvoker(_clients[baseUri].Channel, baseUri));
+                    }
                 }
-                else
+                catch (Exception ex)
                 {
-                    AddMetaData(baseUri, metaData);
+                    DisposeChannel(baseUri);
+                    _logger.LogError(@"{url} ошибка создания клиента: {message} ", baseUri, ex.Message);
                 }
-
-                var connect = Task.Run(async () =>
-                {
-                    await _clients[baseUri].Channel.ConnectAsync(default);
-                });
-                connect.Wait(1000);
-
-                if (_clients[baseUri].Channel.State != ConnectivityState.Ready)
-                    return null;
-
-                return new GateServiceClient(GetCallInvoker(_clients[baseUri].Channel, baseUri));// _clients[baseUri].Client;
+                return null;
             }
         }
 
@@ -111,32 +124,42 @@ namespace RemoteConnectLibrary
                 {
                     var valueBearer = metaData.First(x => x.Key == MetaDataName.Authorization).Value;
 
-                    if (valueBearer.Split(' ').Length > 0 && JwtParser.IsValidToken(valueBearer.Split(' ')[1]))
+                    if (valueBearer.Split(' ').Length > 0 && JwtParser.IsValidToken(valueBearer.Split(' ')[1]) && _clients[baseUri].Channel.State == ConnectivityState.Ready)
                     {
-                        return new GateServiceClient(GetCallInvoker(_clients[baseUri].Channel, baseUri));// _clients[baseUri].Client;
-                        //return new Metadata() { new Metadata.Entry(MetaDataName.Authorization, $"{valueBearer}") };
+                        return new GateServiceClient(GetCallInvoker(_clients[baseUri].Channel, baseUri));
                     }
                 }
             }
 
-            var client = GetGateClient(baseUri);
-
-            if (client == null)
-                return null;
-
-            var s = await client.BeginUserSessAsync(new RequestLogin() { User = login, Password = password }, deadline: DateTime.UtcNow.AddSeconds(30), cancellationToken: token);
-
-            if (!string.IsNullOrEmpty(s.Token))
+            try
             {
-                var data = new Metadata() { new Metadata.Entry(MetaDataName.Authorization, $"{MetaDataName.Bearer} {s.Token}") };
+                var client = GetGateClient(baseUri);
+                if (client != null)
+                {
+                    var s = await client.BeginUserSessAsync(new RequestLogin() { User = login, Password = password }, deadline: DateTime.UtcNow.AddSeconds(30), cancellationToken: token);
 
-                AddMetaData(baseUri, data);
-
-                return client;
+                    if (!string.IsNullOrEmpty(s.Token))
+                    {
+                        var data = new Metadata() { new Metadata.Entry(MetaDataName.Authorization, $"{MetaDataName.Bearer} {s.Token}") };
+                        AddMetaData(baseUri, data);
+                        return client;
+                    }
+                }
             }
-            else
+            catch (Exception ex)
             {
-                throw new Grpc.Core.RpcException(new Status(Grpc.Core.StatusCode.Unauthenticated, "Ошибка авторизации"));
+                DisposeChannel(baseUri);
+                _logger.LogError(@"{url} ошибка авторизации, логин: {login}, пароль: {password}, ошибка: {message} ", baseUri, login, password, ex.Message);
+            }
+            return null;
+        }
+
+        public void DisposeChannel(string? url)
+        {
+            if (!string.IsNullOrEmpty(url) && _clients.ContainsKey(url))
+            {
+                _clients[url].Channel.Dispose();
+                _clients.Remove(url);
             }
         }
 

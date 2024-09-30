@@ -111,7 +111,7 @@ namespace BlazorLibrary.Shared.ObjectTree
                     ForSelectTitle = UUZSRep["GENERAL_LIST_DEVICE"];
                 }
             }
-            _ = _HubContext.SubscribeAsync(this);
+            _ = _HubContext.SubscribeAndStartAsync(this, typeof(IPubSubMethod));
         }
 
         [Description(DaprMessage.PubSubName)]
@@ -232,7 +232,7 @@ namespace BlazorLibrary.Shared.ObjectTree
                                         {
                                             childs.AddRange(forAdd);
                                         }
-                                                                                
+
                                         StateHasChanged();
                                     }
                                 }
@@ -359,8 +359,10 @@ namespace BlazorLibrary.Shared.ObjectTree
                 List<ChildItems<Google.Protobuf.WellKnownTypes.Any>>? response = null;
                 if (SelectItems != null)
                 {
-                    response = new();
-                    response.AddRange(SelectItems.Select(x => new ChildItems<Google.Protobuf.WellKnownTypes.Any>(Google.Protobuf.WellKnownTypes.Any.Pack(x.Key), GetChildSelectFolder)));
+                    response =
+                    [
+                        .. SelectItems.Select(x => new ChildItems<Google.Protobuf.WellKnownTypes.Any>(Google.Protobuf.WellKnownTypes.Any.Pack(x.Key), GetChildSelectFolder)),
+                    ];
                 }
                 return response;
             }
@@ -455,24 +457,59 @@ namespace BlazorLibrary.Shared.ObjectTree
         {
             if (items != null)
             {
-                foreach (var item in items)
+                List<Google.Protobuf.WellKnownTypes.Any> newSelectList = new();
+
+                var keys = items.Where(x => x.Is(Objects.Descriptor)).Select(x => x.Unpack<Objects>());
+
+                var childs = items.Where(x => x.Is(CGetSitItemInfo.Descriptor)).Select(x => x.Unpack<CGetSitItemInfo>());
+
+                foreach (var item in keys)
                 {
-                    if (item.Is(Objects.Descriptor) && item.TryUnpack<Objects>(out var obj))
-                    {
-                        await OnLoadChildData(obj);
-                    }
+                    await OnLoadChildData(item);
+                    newSelectList.Add(Google.Protobuf.WellKnownTypes.Any.Pack(item));
+                }
+
+                var selectKeys = Caches.Where(x => keys?.Contains(x.Key) ?? false).SelectMany(x => x.Childs ?? []);
+
+                newSelectList.AddRange(childs.Except(selectKeys ?? []).Select(x => Google.Protobuf.WellKnownTypes.Any.Pack(x)));
+
+                SelectList = newSelectList;
+                if (AutoAdd)
+                {
+                    AddSelected();
                 }
             }
-            SelectList = items;
-            if (AutoAdd)
+            else
             {
-                AddSelected();
+                SelectList = null;
             }
         }
 
         void SetSelectedList(List<Google.Protobuf.WellKnownTypes.Any>? items)
         {
-            SelectListSelected = items;
+            if (items != null)
+            {
+                List<Google.Protobuf.WellKnownTypes.Any> newSelectList = new();
+
+                var keys = items.Where(x => x.Is(Objects.Descriptor)).Select(x => x.Unpack<Objects>());
+
+                var childs = items.Where(x => x.Is(CGetSitItemInfo.Descriptor)).Select(x => x.Unpack<CGetSitItemInfo>());
+
+                foreach (var item in keys)
+                {
+                    newSelectList.Add(Google.Protobuf.WellKnownTypes.Any.Pack(item));
+                }
+
+                var selectKeys = SelectItems?.Where(x => keys?.Contains(x.Key) ?? false).SelectMany(x => x.Child);
+
+                newSelectList.AddRange(childs.Except(selectKeys ?? []).Select(x => Google.Protobuf.WellKnownTypes.Any.Pack(x)));
+
+                SelectListSelected = newSelectList;
+            }
+            else
+            {
+                SelectListSelected = null;
+            }
         }
 
         private void AddSelected()
@@ -604,11 +641,47 @@ namespace BlazorLibrary.Shared.ObjectTree
             Objects? newSelectFolder = null;
             CGetSitItemInfo? newSelectChild = null;
             bool isDeleteChild = false;
+            bool resultDelete = false;
             if (SelectListSelected != null && SelectItems != null)
             {
+                List<CGetSitItemInfo> selectItem = new();
                 var folder = SelectListSelected.Where(x => x.Is(Objects.Descriptor)).Select(x => x.Unpack<Objects>());
 
                 if (folder.Count() > 0)
+                {
+                    foreach (var f in folder)
+                    {
+                        var childsForKey = SelectItems.FirstOrDefault(x => f.OBJID.Equals(x.Key.OBJID))?.Child;
+                        if (childsForKey != null)
+                        {
+                            selectItem.AddRange(childsForKey);
+                        }
+                    }
+                }
+
+                var items = SelectListSelected.Where(x => x.Is(CGetSitItemInfo.Descriptor)).Select(x => x.Unpack<CGetSitItemInfo>());
+                if (items.Count() > 0)
+                {
+                    var key = SelectItems.LastOrDefault(x => x.Child.Contains(items.Last()));
+                    newSelectChild = key?.Child.SkipWhile(x => !items.Contains(x)).FirstOrDefault(x => !items.Contains(x)) ?? key?.Child.LastOrDefault(x => !items.Contains(x));
+                    newSelectFolder = key?.Key;
+
+                    isDeleteChild = true;
+                    foreach (var child in items)
+                    {
+                        if (SelectItems.Any(x => x.Child.Contains(child)) && !selectItem.Contains(child))
+                        {
+                            selectItem.Add(child);
+                        }
+                    }
+                }
+
+                if (selectItem.Count > 0)
+                {
+                    resultDelete = await RemoveSelectedItem(selectItem, IsDelete);
+                }
+
+                if (Abon == null && resultDelete || (selectItem.Count == 0 && folder.Any()))
                 {
                     newSelectFolder = SelectItems.SkipWhile(x => !folder.Contains(x.Key)).FirstOrDefault(x => !folder.Contains(x.Key))?.Key;
                     foreach (var f in folder)
@@ -627,73 +700,59 @@ namespace BlazorLibrary.Shared.ObjectTree
                             }
                         }
                         else
-                            SelectItems.RemoveAll(x => x.Key.Equals(f));
-                    }
-                }
-
-                var items = SelectListSelected.Where(x => x.Is(CGetSitItemInfo.Descriptor)).Select(x => x.Unpack<CGetSitItemInfo>());
-                if (items.Count() > 0)
-                {
-                    var key = SelectItems.LastOrDefault(x => x.Child.Contains(items.Last()));
-                    newSelectChild = key?.Child.SkipWhile(x => !items.Contains(x)).FirstOrDefault(x => !items.Contains(x));
-                    newSelectFolder = key?.Key;
-                    List<CGetSitItemInfo> selectItem = new();
-                    isDeleteChild = true;
-                    foreach (var child in items)
-                    {
-                        if (SelectItems.Any(x => x.Child.Contains(child)))
                         {
-                            selectItem.Add(child);
+                            SelectItems.RemoveAll(x => x.Key.Equals(f));
                         }
                     }
-                    await RemoveSelectedItem(selectItem, IsDelete);
-                }
-            }
-            if (Abon == null)
-            {
-                SelectListSelected = null;
-                if (SelectItems?.Count > 0)
-                {
-                    if (!isDeleteChild)
+
+                    SelectListSelected = null;
+                    if (SelectItems?.Count > 0)
                     {
-                        if (newSelectFolder == null)
+                        if (!isDeleteChild)
                         {
-                            SelectListSelected = new() { Google.Protobuf.WellKnownTypes.Any.Pack(SelectItems.Last().Key) };
+                            if (newSelectFolder == null)
+                            {
+                                SelectListSelected = new() { Google.Protobuf.WellKnownTypes.Any.Pack(SelectItems.Last().Key) };
+                            }
+                            else
+                                SelectListSelected = new() { Google.Protobuf.WellKnownTypes.Any.Pack(newSelectFolder) };
                         }
                         else
-                            SelectListSelected = new() { Google.Protobuf.WellKnownTypes.Any.Pack(newSelectFolder) };
-                    }
-                    else
-                    {
-                        if (newSelectChild == null)
                         {
-                            if (newSelectFolder != null)
+                            if (newSelectChild == null)
                             {
-                                var elem = SelectItems.FirstOrDefault(x => x.Key.Equals(newSelectFolder));
-                                if (elem?.Child.Count > 0)
+                                if (newSelectFolder != null)
                                 {
-                                    SelectListSelected = new() { Google.Protobuf.WellKnownTypes.Any.Pack(elem.Child.Last()) };
+                                    var elem = SelectItems.FirstOrDefault(x => x.Key.Equals(newSelectFolder));
+                                    if (elem?.Child.Count > 0)
+                                    {
+                                        SelectListSelected = new() { Google.Protobuf.WellKnownTypes.Any.Pack(elem.Child.Last()) };
+                                    }
+                                    else
+                                    {
+                                        var nextElem = SelectItems.SkipWhile(x => !newSelectFolder.Equals(x.Key)).FirstOrDefault(x => !newSelectFolder.Equals(x.Key))?.Key ?? SelectItems.LastOrDefault(x => !newSelectFolder.Equals(x.Key))?.Key;
+                                        SelectItems.RemoveAll(x => x.Key.Equals(newSelectFolder));
+                                        if (nextElem != null)
+                                            SelectListSelected = new() { Google.Protobuf.WellKnownTypes.Any.Pack(nextElem) };
+                                    }
                                 }
-                                else
+                                else if (SelectItems.LastOrDefault() != null)
                                 {
-                                    var nextElem = SelectItems.SkipWhile(x => !newSelectFolder.Equals(x.Key)).FirstOrDefault(x => !newSelectFolder.Equals(x.Key))?.Key ?? SelectItems.LastOrDefault(x => !newSelectFolder.Equals(x.Key))?.Key;
-                                    SelectItems.RemoveAll(x => x.Key.Equals(newSelectFolder));
-                                    if (nextElem != null)
-                                        SelectListSelected = new() { Google.Protobuf.WellKnownTypes.Any.Pack(nextElem) };
+                                    SelectListSelected = new() { Google.Protobuf.WellKnownTypes.Any.Pack(SelectItems.Last().Key) };
                                 }
                             }
+                            else
+                                SelectListSelected = new() { Google.Protobuf.WellKnownTypes.Any.Pack(newSelectChild) };
                         }
-                        else
-                            SelectListSelected = new() { Google.Protobuf.WellKnownTypes.Any.Pack(newSelectChild) };
                     }
                 }
             }
         }
 
-        private async Task RemoveSelectedItem(List<CGetSitItemInfo>? selectItem, bool? IsDelete = false)
+        private async Task<bool> RemoveSelectedItem(List<CGetSitItemInfo>? selectItem, bool? IsDelete = false)
         {
             if (selectItem == null || SelectItems == null)
-                return;
+                return false;
 
             var c = SelectItems.FirstOrDefault(x => x.Child.Any(a => a.Equals(selectItem.First())));
 
@@ -709,6 +768,7 @@ namespace BlazorLibrary.Shared.ObjectTree
                     WarningDelete = AsoRep["AbonInSit"];
                 }
 
+                //двойной клик, отображаем окно редактирования абонента
                 if (SystemId == SubsystemType.SUBSYST_ASO && IsDelete == false && IsCreateList && selectItem.Count == 1)
                 {
                     Abon = selectItem.First().AsoAbonID;
@@ -741,7 +801,7 @@ namespace BlazorLibrary.Shared.ObjectTree
                             IsDeleteAbon = true;
                             if (ListObj != null && ListObj.Count > 0)
                             {
-                                return;
+                                return false;
                             }
                         }
                         else
@@ -762,9 +822,14 @@ namespace BlazorLibrary.Shared.ObjectTree
                         {
                             c.Child.Remove(item);
                         }
+                        if (c.Child.Count == 0)
+                        {
+                            SelectItems.Remove(c);
+                        }
                     }
                 }
             }
+            return true;
         }
 
         void RermoveSelectedAll()

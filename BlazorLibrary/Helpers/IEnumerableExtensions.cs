@@ -1,19 +1,9 @@
-﻿using System;
-using System.Collections;
-using System.Collections.Generic;
-using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
-using BlazorLibrary.Models;
+﻿using BlazorLibrary.Models;
 using FiltersGSOProto.V1;
 using Google.Protobuf;
 using Google.Protobuf.Collections;
 using Google.Protobuf.Reflection;
 using Google.Protobuf.WellKnownTypes;
-using Microsoft.IdentityModel.Tokens;
-using SMDataServiceProto.V1;
-using static System.Runtime.InteropServices.JavaScript.JSType;
-using static Google.Protobuf.Reflection.MessageDescriptor;
 
 namespace BlazorLibrary.Helpers
 {
@@ -334,7 +324,6 @@ namespace BlazorLibrary.Helpers
 
         }
 
-
         public static IEnumerable<FiltrItem> CreateListFiltrItemFromFiltrModel(this IMessage? protoModel)
         {
             List<FiltrItem> response = new();
@@ -400,6 +389,45 @@ namespace BlazorLibrary.Helpers
                 }
             }
             return response;
+        }
+
+        public static List<Tdata>? Sort<Tdata>(this IEnumerable<Tdata>? model, int columnNumber = 0, int flagSort = 0) where Tdata : IMessage
+        {
+            try
+            {
+                if (model != null)
+                {
+                    bool flag = flagSort == 0;
+
+                    if (model.FirstOrDefault()?.GetType().GetProperties().Where(x => x.CanWrite).Count() >= columnNumber)
+                    {
+                        var prop = model.FirstOrDefault()?.GetType().GetProperties().Where(x => x.CanWrite).ToList();
+
+                        var p = prop?.ElementAt(columnNumber);
+
+                        if (p?.PropertyType.Equals(new Timestamp().GetType()) ?? false)
+                        {
+                            if (flag)
+                            {
+                                return model.OrderBy(x => p?.GetValue(x, null) as Timestamp).ToList();
+                            }
+                            else
+                            {
+                                return model.OrderByDescending(x => p?.GetValue(x, null) as Timestamp).ToList();
+                            }
+                        }
+                        else
+                        {
+                            return model.OrderBy(x => (flag ? p?.GetValue(x, null) : true)).ThenByDescending(x => (!flag ? p?.GetValue(x, null) : true)).ToList();
+                        }
+                    }
+                }
+            }
+            finally
+            {
+
+            }
+            return model?.ToList();
         }
     }
 }

@@ -4,7 +4,7 @@
         <label class="form-label">@RepoterRep["IDS_FONT_HEADER"]</label>
         @if (ReportFont != null)
         {
-            <select class="form-select" @bind="ReportFont.FontSize">
+            <select class="form-select" @bind="ReportFont.FontSize" @bind:after="CallEvent">
                 @foreach (var item in FontNameArr)
                 {
                     <option value="@(Array.IndexOf(FontNameArr, item))">@item</option>
@@ -20,72 +20,81 @@
     @*Шрифт информации*@
     <div class="col-md-6">
         <label class="form-label">@RepoterRep["IDS_FONT_TEXT"]</label>
-        <BSecondary IsOutline="true" AddClass="w-100" Text="@GetNameFont()" OnClick="()=>IsViewEditFont=true" />
+        <BSecondary IsOutline="true" AddClass="w-100" Text="@GetNameFont" OnClick="ViewEditDialog" />
     </div>
 </div>
 
-<CheckP BitPos="NameBitsPos.Create">
-    @if (IsViewEditFont)
-    {
-        <ModalDialog Title="@AsoRep["FontFamily"]" ButtonCloseEvent="()=>IsViewEditFont=false">
-            <BodyContent>
-                <BlazorLibrary.Shared.FormComponent.FormDefault OnSumbit="ChangeFont">
-                    @*Шрифт*@
-                    <div class="mb-3">
-                        <label class="form-label">@AsoRep["FontFamily"]</label>
-                        <select class="form-select" @bind="NewReportFont.StrName">
-                            @foreach (var item in FontFamilyList)
+@if (IsViewEditFont)
+{
+    <ModalDialog Title="@AsoRep["FontFamily"]" ButtonCloseEvent="()=>IsViewEditFont=false">
+        <BodyContent>
+            <BlazorLibrary.Shared.FormComponent.FormDefault OnSumbit="ChangeFont">
+                @*Шрифт*@
+                <div class="mb-3">
+                    <label class="form-label">@AsoRep["FontFamily"]</label>
+                    <select class="form-select" @bind="NewReportFont.StrName">
+                        @foreach (var item in FontFamilyList)
+                        {
+                            <option value="@item.Key">@item.Value</option>
+                        }
+                    </select>
+                </div>
+                @*Начертание*@
+                <div class="mb-3">
+                    <label class="form-label">@AsoRep["FontItalic"]</label>
+                    <select class="form-select" @bind="StyleValue">
+                        @foreach (var item in FontItalic)
+                        {
+                            <option value="@item.Key">@item.Value</option>
+                        }
+                    </select>
+                </div>
+                @*Размер*@
+                <div class="mb-3">
+                    <label class="form-label">@AsoRep["FontSize"]</label>
+                    <select class="form-select" @bind="NewReportFont.Size">
+                        @for (int i = 8; i < 48; i++)
+                        {
+                            if (i > 12)
                             {
-                                <option value="@item.Key">@item.Value</option>
+                                i++;
                             }
-                        </select>
-                    </div>
-                    @*Начертание*@
-                    <div class="mb-3">
-                        <label class="form-label">@AsoRep["FontItalic"]</label>
-                        <select class="form-select" @bind="NewReportFont.Style">
-                            @foreach (var item in FontItalic)
-                            {
-                                <option value="@item.Key">@item.Value</option>
-                            }
-                        </select>
-                    </div>
-                    @*Размер*@
-                    <div class="mb-3">
-                        <label class="form-label">@AsoRep["FontSize"]</label>
-                        <select class="form-select" @bind="NewReportFont.Size">
-                            @for (int i = 8; i < 48; i++)
-                            {
-                                if (i > 12)
-                                {
-                                    i++;
-                                }
-                                <option value="@i">@i</option>
-                            }
-                        </select>
-                    </div>
-                    <ButtonModal>
-                        <BSumbit IsProcessing="context" />
-                        <BCancel OnClick="()=>IsViewEditFont=false" />
-                    </ButtonModal>
-                </BlazorLibrary.Shared.FormComponent.FormDefault>
-            </BodyContent>
-        </ModalDialog>
-    }
-</CheckP>
+                            <option value="@i">@i</option>
+                        }
+                    </select>
+                </div>
+                <ButtonModal>
+                    <BSumbit Text="@GsoRep["APPLY"]" IsProcessing="context" IsDisabled="IsEqualModel" />
+                    <BCancel OnClick="()=>IsViewEditFont=false" />
+                </ButtonModal>
+            </BlazorLibrary.Shared.FormComponent.FormDefault>
+        </BodyContent>
+    </ModalDialog>
+}
 
 
 @code {
     [Parameter]
-    public ReporterFont? ReportFont { get; set; }
+    public Models.ReporterFont? ReportFont { get; set; }
 
-    private string[] FontNameArr = { };
+    [Parameter]
+    public EventCallback CallEventChange { get; set; }
+
+    async Task CallEvent()
+    {
+        if (CallEventChange.HasDelegate)
+        {
+            await CallEventChange.InvokeAsync();
+        }
+    }
+
+    private string[] FontNameArr => [RepoterRep["Smallest"].Value, RepoterRep["Small"].Value, RepoterRep["Average"].Value, RepoterRep["Large"].Value, RepoterRep["Largest"].Value];
 
     private bool IsViewEditFont = false;
 
-    private ReporterFont NewReportFont = new();
+    private Models.ReporterFont NewReportFont = new();
 
-    private Dictionary<int, string> FontItalic = new();
+    private Dictionary<int, string> FontItalic => new() { { 1, RepoterRep["ordinary"] }, { 2, RepoterRep["italics"] }, { 3, RepoterRep["bold"] }, { 4, RepoterRep["bolditalics"] } };
 
     private Dictionary<string, string> FontFamilyList = new() {
                                         {"'Franklin Gothic Medium', 'Arial Narrow', Arial, sans-serif", "Franklin Gothic Medium, Arial Narrow, Arial"},
@@ -96,64 +105,79 @@
                                         {"Calibri", "Calibri"},
                                         {"Georgia, 'Times New Roman', Times, serif", "Georgia, Times New Roman, Times"} };
 
-    protected override void OnInitialized()
-    {
-        FontItalic = new() { { 1, RepoterRep["ordinary"] }, { 2, RepoterRep["italics"] }, { 3, RepoterRep["bold"] }, { 4, RepoterRep["bolditalics"] } };
-        FontNameArr = new[] { RepoterRep["Smallest"].Value, RepoterRep["Small"].Value, RepoterRep["Average"].Value, RepoterRep["Large"].Value, RepoterRep["Largest"].Value };
 
+    bool IsEqualModel => NewReportFont.StrName == ReportFont?.StrName && NewReportFont.Weight == ReportFont?.Weight && NewReportFont.Style == ReportFont?.Style && NewReportFont.Size == ReportFont?.Size;
+
+    int StyleValue
+    {
+        get
+        {
+            if (NewReportFont.Weight < 700 && NewReportFont.Style == 0)
+                return 1;
+            else if (NewReportFont.Weight < 700 && NewReportFont.Style == 255)
+                return 2;
+            else if (NewReportFont.Weight >= 700 && NewReportFont.Style == 0)
+                return 3;
+            else if (NewReportFont.Weight >= 700 && NewReportFont.Style == 255)
+                return 4;
+            return 0;
+        }
+        set
+        {
+            switch (value)
+            {
+                case 1: { NewReportFont.Weight = 400; NewReportFont.Style = 0; }; break;
+                case 2: { NewReportFont.Weight = 400; NewReportFont.Style = 255; }; break;
+                case 3: { NewReportFont.Weight = 700; NewReportFont.Style = 0; }; break;
+                case 4: { NewReportFont.Weight = 700; NewReportFont.Style = 255; }; break;
+            }
+        }
+    }
+
+    void ViewEditDialog()
+    {
         if (ReportFont != null)
         {
             NewReportFont.StrName = ReportFont.StrName;
+            NewReportFont.Weight = ReportFont.Weight;
+            NewReportFont.Style = ReportFont.Style;
             NewReportFont.Size = ReportFont.Size;
-            if (ReportFont.Weight < 700 && ReportFont.Style == 0)
-                NewReportFont.Style = 1;
-            else if (ReportFont.Weight < 700 && ReportFont.Style == 255)
-                NewReportFont.Style = 2;
-            else if (ReportFont.Weight >= 700 && ReportFont.Style == 0)
-                NewReportFont.Style = 3;
-            else if (ReportFont.Weight >= 700 && ReportFont.Style == 255)
-                NewReportFont.Style = 4;
         }
+        IsViewEditFont = true;
     }
 
-    private void ChangeFont()
+    private async void ChangeFont()
     {
-        if (ReportFont == null)
-            ReportFont = new();
-
+        ReportFont ??= new();
         ReportFont.StrName = NewReportFont.StrName;
-
-        switch (NewReportFont.Style)
-        {
-            case 1: { ReportFont.Weight = 400; ReportFont.Style = 0; }; break;
-            case 2: { ReportFont.Weight = 400; ReportFont.Style = 255; }; break;
-            case 3: { ReportFont.Weight = 700; ReportFont.Style = 0; }; break;
-            case 4: { ReportFont.Weight = 700; ReportFont.Style = 255; }; break;
-        }
+        ReportFont.Weight = NewReportFont.Weight;
+        ReportFont.Style = NewReportFont.Style;
         ReportFont.Size = NewReportFont.Size;
-
+        await CallEvent();
         IsViewEditFont = false;
     }
 
-    private string GetNameFont()
+    private string GetNameFont
     {
-        string str = "";
-        if (ReportFont != null)
+        get
         {
-            str = ReportFont.StrName ?? "";
+            string str = "";
+            if (ReportFont != null)
+            {
+                str = ReportFont.StrName ?? "";
 
-            if (ReportFont.Weight < 700 && 0 == ReportFont.Style)
-                str += ", " + RepoterRep["ordinary"];
-            else if (ReportFont.Weight < 700 && 0 != ReportFont.Style)
-                str += ", " + RepoterRep["italics"];
-            else if (ReportFont.Weight >= 700 && 0 == ReportFont.Style)
-                str += ", " + RepoterRep["bold"];
-            else if (ReportFont.Weight >= 700 && 0 != ReportFont.Style)
-                str += ", " + RepoterRep["bolditalics"];
-            str += ", " + ReportFont.Size + "pt";
+                if (ReportFont.Weight < 700 && 0 == ReportFont.Style)
+                    str += ", " + RepoterRep["ordinary"];
+                else if (ReportFont.Weight < 700 && 0 != ReportFont.Style)
+                    str += ", " + RepoterRep["italics"];
+                else if (ReportFont.Weight >= 700 && 0 == ReportFont.Style)
+                    str += ", " + RepoterRep["bold"];
+                else if (ReportFont.Weight >= 700 && 0 != ReportFont.Style)
+                    str += ", " + RepoterRep["bolditalics"];
 
-
+                str += ", " + ReportFont.Size + "pt";
+            }
+            return str;
         }
-        return str;
     }
 }

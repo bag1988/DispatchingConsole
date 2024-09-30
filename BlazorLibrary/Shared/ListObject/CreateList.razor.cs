@@ -56,7 +56,7 @@ namespace BlazorLibrary.Shared.ListObject
                 SelectFolders = new();
 
             IsPageLoad = false;
-            _ = _HubContext.SubscribeAsync(this);
+            _ = _HubContext.SubscribeAndStartAsync(this, typeof(IPubSubMethod));
         }
 
         [Description(DaprMessage.PubSubName)]

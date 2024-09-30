@@ -1,4 +1,4 @@
-﻿using SharedLibrary.Models;
+﻿using SensorM.GsoCommon.ServerLibrary.Models;
 using SharedLibrary.Utilities;
 
 namespace ServerLibrary.HubsProvider
@@ -27,11 +27,15 @@ namespace ServerLibrary.HubsProvider
                     _connections.Add(conn);
                 }
 
-                if (!conn.ConnectionsItem.Any(x => x.ContextId == contextId))
+                var firstConnect = conn.ConnectionsItem.FirstOrDefault(x => x.IdUiConnect == guidUi);
+                if (firstConnect != null)
                 {
-                    var newConnect = new UiConnectInfo(contextId, guidUi, userName);
-
-                    conn.ConnectionsItem.Add(newConnect);
+                    firstConnect.ContextId = contextId;
+                }
+                else
+                {
+                    firstConnect = new(contextId, guidUi, userName);
+                    conn.ConnectionsItem.Add(firstConnect);
                 }
             }
         }
@@ -162,40 +166,4 @@ namespace ServerLibrary.HubsProvider
             }
         }
     }
-
-    #region For Hub
-
-    public class ConnectionsForHub
-    {
-        public ConnectionsForHub(string authorityUrl)
-        {
-            AuthorityUrl = IpAddressUtilities.GetAuthority(authorityUrl);
-        }
-        public string AuthorityUrl { get; set; }
-        public List<UiConnectInfo> ConnectionsItem { get; set; } = new();
-    }
-
-    public class UiConnectInfo
-    {
-        public UiConnectInfo(string contextId, Guid idUiConnect, string userName)
-        {
-            ContextId = contextId;
-            IdUiConnect = idUiConnect;
-            UserName = userName;
-        }
-        public string ContextId { get; set; }
-        public Guid IdUiConnect { get; set; }
-        public string UserName { get; set; }
-    }
-
-    public class PushMessageChat
-    {
-        public string? Title { get; set; }
-        public string? Url { get; set; }
-        public string? Message { get; set; }
-        public string? KeyChatRoom { get; set; }
-        public string? ForUser { get; set; }
-        public string? ForUrl { get; set; }
-    }
-    #endregion
 }

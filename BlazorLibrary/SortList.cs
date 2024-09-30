@@ -12,7 +12,7 @@ namespace BlazorLibrary
                 if (model == null)
                     return;
 
-                bool flag = flagSort == 1;
+                bool flag = flagSort == 0;
 
                 if (model.FirstOrDefault()?.GetType().GetProperties().Where(x => x.CanWrite).Count() >= columnNumber)
                 {
@@ -24,12 +24,18 @@ namespace BlazorLibrary
                     if (p?.PropertyType.Equals(new Timestamp().GetType()) ?? false)
                     {
                         if (flag)
+                        {
                             model = model.OrderBy(x => p?.GetValue(x, null) as Timestamp).ToList();
+                        }
                         else
+                        {
                             model = model.OrderByDescending(x => p?.GetValue(x, null) as Timestamp).ToList();
+                        }
                     }
                     else
+                    {
                         model = model.OrderBy(x => (flag ? p?.GetValue(x, null) : true)).ThenByDescending(x => (!flag ? p?.GetValue(x, null) : true)).ToList();
+                    }
                 }
             }
             catch

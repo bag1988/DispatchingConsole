@@ -1,17 +1,23 @@
 ﻿@if (!string.IsNullOrEmpty(Details))
 {
-    @if (IsViewText)
-    {
-        <span class="d-block">
-            @Details
-        </span>
-    }
-    <button @onclick="SetViewText" title="@Details" class="float-end btn btn-outline-dark p-1" style="line-height: 0.8rem;font-size: 1.2rem; border:none;">@GetText</button>
+    <button @onclick="SetViewText" title="@Details" class="float-end btn btn-outline-dark ms-1 p-1" style="line-height: 0.8rem;font-size: 1.2rem; border:none;">@GetText</button>
+}
+
+@ContentText
+
+@if (IsViewText)
+{
+    <span class="d-block">
+        @Details
+    </span>
 }
 
 @code {
     [Parameter]
     public string? Details { get; set; }
+
+    [Parameter]
+    public string? ContentText { get; set; }
 
     bool IsViewText = false;
 

@@ -5,7 +5,7 @@ using Google.Protobuf;
 using LibraryProto.Helpers;
 using Microsoft.AspNetCore.Components;
 using Microsoft.Extensions.Localization;
-using ReplaceLibrary;
+using LocalizationLibrary;
 using SharedLibrary.Models;
 using SMDataServiceProto.V1;
 
@@ -20,7 +20,7 @@ namespace BlazorLibrary.FolderForInherits
         GetUserInfo? _User { get; set; }
 
         [Inject]
-        IStringLocalizer<ReplaceDictionary> Rep { get; set; } = default!;
+        IStringLocalizer<SharedLocalization> Rep { get; set; } = default!;
 
         readonly public GetItemRequest request = new() { ObjID = new OBJ_ID(), LSortOrder = 0, BFlagDirection = 1, CountData = 100, SkipItems = 0 };
 

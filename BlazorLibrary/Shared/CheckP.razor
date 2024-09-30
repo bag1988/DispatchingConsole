@@ -1,17 +1,8 @@
 ﻿@using BlazorLibrary.Helpers
-@if (BitPos != null)
+
+@if (IsAllowed)
 {
-    @if (CheckPermission.CheckBitPos(PerSub, BitPos))
-    {
-        @ChildContent
-    }
-}
-else if (BitPosList != null)
-{
-    @if (CheckPermission.CheckBitPos(PerSub, BitPosList))
-    {
-        @ChildContent
-    }
+    @ChildContent
 }
 
 @code {
@@ -24,30 +15,55 @@ else if (BitPosList != null)
     [Parameter]
     public int[]? BitPosList { get; set; }
 
-    private PermisionsUser? Permisions = null;
-
     [Parameter]
     public int? SystemID { get; set; }
 
+    [Parameter]
+    public CheckForInfo[]? CheckForSystem { get; set; }
+
     int SystemId => ParseUrlSegments.GetSystemId(MyNavigationManager.Uri);
 
-    private byte[]? PerSub = null;
+    bool IsAllowed = false;
 
     protected override async Task OnInitializedAsync()
     {
-        Permisions = await _User.GetAuthPerm();
-        if (SystemID == null)
-            SystemID = SystemId;
-        switch (SystemID)
+        if (CheckForSystem?.Length > 0)
         {
-            case SubsystemType.SUBSYST_ASO: PerSub = Permisions.PerAccAso; break;
-            case SubsystemType.SUBSYST_SZS: PerSub = Permisions.PerAccSzs; break;
-            case SubsystemType.SUBSYST_GSO_STAFF: PerSub = Permisions.PerAccCu; break;
-            case SubsystemType.SUBSYST_P16x: PerSub = Permisions.PerAccP16; break;
-            case SubsystemType.SUBSYST_Security: PerSub = Permisions.PerAccSec; break;
-            case SubsystemType.SUBSYST_Setting: PerSub = Permisions.PerAccFn; break;
-            case SubsystemType.SUBSYST_RDM: PerSub = Permisions.PerAccRdm; break;
+            foreach (var item in CheckForSystem)
+            {
+                IsAllowed = await _User.CheckPermForSubsystem(item.SystemID, item.BitPosList);
+                if (IsAllowed)
+                {
+                    return;
+                }
+            }
         }
+        else
+        {
+            if (SystemID == null)
+            {
+                SystemID = SystemId;
+            }
+
+            if (BitPos != null && BitPosList == null)
+            {
+                BitPosList = [BitPos.Value];
+            }
+            IsAllowed = await _User.CheckPermForSubsystem(SystemID.Value, BitPosList);
+        }
+
     }
 
+
+    public class CheckForInfo
+    {
+        public int SystemID { get; set; }
+        public int[] BitPosList { get; set; }
+
+        public CheckForInfo(int systemID, int[] bitPosList)
+        {
+            SystemID = systemID;
+            BitPosList = bitPosList;
+        }
+    }
 }

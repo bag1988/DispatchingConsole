@@ -1,12 +1,10 @@
 ﻿using System.Text.Json;
-using BlazorLibrary.GlobalEnums;
 using BlazorLibrary.Models;
 using Google.Protobuf;
 using Microsoft.AspNetCore.SignalR.Client;
+using Microsoft.Extensions.Logging;
 using Microsoft.JSInterop;
-using SharedLibrary;
 using SharedLibrary.GlobalEnums;
-using SharedLibrary.Models;
 using SMDataServiceProto.V1;
 
 namespace BlazorLibrary.ServiceColection
@@ -15,28 +13,14 @@ namespace BlazorLibrary.ServiceColection
     {
         private readonly IJSRuntime _jsRuntime;
 
-        public LocalStorage(IJSRuntime jsRuntime)
+        private static readonly SemaphoreSlim semaphore = new(1, 1);
+
+        private readonly ILogger<LocalStorage> _logger;
+
+        public LocalStorage(IJSRuntime jsRuntime, ILogger<LocalStorage> logger)
         {
             _jsRuntime = jsRuntime;
-        }
-
-        public async Task<DateTime?> GetLastActiveDateAsync()
-        {
-            try
-            {
-                var s = await _jsRuntime.InvokeAsync<DateTime>("localStorage.getItem", CookieName.LastActiveDate);
-                return s;
-            }
-            catch
-            {
-                await _jsRuntime.InvokeVoidAsync("localStorage.removeItem", CookieName.LastActiveDate);
-                return null;
-            }
-        }
-
-        public async Task SetLastActiveDateAsync(DateTime dateTime)
-        {
-            await _jsRuntime.InvokeVoidAsync("localStorage.setItem", CookieName.LastActiveDate, dateTime);
+            _logger = logger;
         }
 
         public async Task<string?> GetAppIdAsync()
@@ -45,40 +29,46 @@ namespace BlazorLibrary.ServiceColection
             return s;
         }
 
-        public async Task SetAppIdAsync(string? appId = null)
-        {
-            if (appId == null)
-            {
-                await _jsRuntime.InvokeVoidAsync("localStorage.removeItem", CookieName.AppId);
-            }
-            else
-            {
-                await _jsRuntime.InvokeVoidAsync("localStorage.setItem", CookieName.AppId, appId);
-            }
-        }
-
         public async Task<string?> GetTokenAsync()
         {
-            var s = await _jsRuntime.InvokeAsync<string>("localStorage.getItem", CookieName.Token);
-            return s;
+            string? response = null;
+            try
+            {
+                await semaphore.WaitAsync(TimeSpan.FromSeconds(3));
+                response = await _jsRuntime.InvokeAsync<string>("localStorage.getItem", CookieName.Token);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError("Ошибка получения токена: {message}", ex.Message);
+            }
+            SemaphoreRelease();
+            return response;
         }
 
         public async Task SetTokenAsync(string? token = null)
         {
-            if (token == null)
+            try
             {
-                await _jsRuntime.InvokeVoidAsync("localStorage.removeItem", CookieName.Token);
+                await semaphore.WaitAsync(TimeSpan.FromSeconds(3));
+                if (token == null)
+                {
+                    await _jsRuntime.InvokeVoidAsync("localStorage.removeItem", CookieName.Token);
+                }
+                else
+                {
+                    await _jsRuntime.InvokeVoidAsync("localStorage.setItem", CookieName.Token, token);
+                }
             }
-            else
+            catch (Exception ex)
             {
-                await _jsRuntime.InvokeVoidAsync("localStorage.setItem", CookieName.Token, token);
+                _logger.LogError("Ошибка установки токена: {message}", ex.Message);
             }
+            SemaphoreRelease();
         }
 
         public async Task RemoveAllAsync()
         {
             await SetTokenAsync();
-            await SetAppIdAsync();
         }
 
         public async Task<string?> GetLastUserName()
@@ -133,46 +123,80 @@ namespace BlazorLibrary.ServiceColection
             FiltrCookieItem? cookieItem = null;
             try
             {
-                var base64 = await _jsRuntime.InvokeAsync<string?>("localStorage.getItem", $"{CookieName.FiltrRequest}.{filtrName.ToLower()}");
-                List<FiltrCookieItem> listItem = new();
-                if (!string.IsNullOrEmpty(base64))
+                if (!string.IsNullOrEmpty(userName) && !string.IsNullOrEmpty(filtrName))
                 {
-                    listItem = JsonSerializer.Deserialize<List<FiltrCookieItem>>(Convert.FromBase64String(base64)) ?? new();
-                }
+                    var base64 = await _jsRuntime.InvokeAsync<string?>("localStorage.getItem", $"{CookieName.FiltrRequest}.{filtrName.ToLower()}");
+                    List<FiltrCookieItem> listItem = new();
+                    if (!string.IsNullOrEmpty(base64))
+                    {
+                        listItem = JsonSerializer.Deserialize<List<FiltrCookieItem>>(Convert.FromBase64String(base64)) ?? new();
+                    }
 
-                cookieItem = listItem.FirstOrDefault(x => x.UserName == userName);
-                if (cookieItem == null)
-                {
-                    cookieItem = new(userName);
-                    listItem.Add(cookieItem);
-                }
+                    cookieItem = listItem.FirstOrDefault(x => x.UserName == userName);
+                    if (cookieItem == null)
+                    {
+                        cookieItem = new(userName);
+                        listItem.Add(cookieItem);
+                    }
 
-                if (cookieItem.Filters == null)
-                {
-                    cookieItem.Filters = new();
-                }
+                    if (cookieItem.Filters == null)
+                    {
+                        cookieItem.Filters = new();
+                    }
 
-                cookieItem.Filters.LastRequest = items;
+                    cookieItem.Filters.LastRequest = items;
 
-                if (items != null && items.Count > 0 && !cookieItem.Filters.HistoryRequest.Any(x => items.SequenceEqual(x)))
-                {
-                    if (cookieItem.Filters.HistoryRequest.Count >= 5)
-                        cookieItem.Filters.HistoryRequest.RemoveRange(4, cookieItem.Filters.HistoryRequest.Count - 4);
-                    cookieItem.Filters.HistoryRequest.Insert(0, items);
+                    if (items != null && items.Count > 0 && !cookieItem.Filters.HistoryRequest.Any(x => items.SequenceEqual(x)))
+                    {
+                        if (cookieItem.Filters.HistoryRequest.Count >= 5)
+                            cookieItem.Filters.HistoryRequest.RemoveRange(4, cookieItem.Filters.HistoryRequest.Count - 4);
+                        cookieItem.Filters.HistoryRequest.Insert(0, items);
+                    }
+                    await _jsRuntime.InvokeVoidAsync("localStorage.setItem", $"{CookieName.FiltrRequest}.{filtrName.ToLower()}", Convert.ToBase64String(JsonSerializer.SerializeToUtf8Bytes(listItem)));
                 }
-                await _jsRuntime.InvokeVoidAsync("localStorage.setItem", $"{CookieName.FiltrRequest}.{filtrName.ToLower()}", Convert.ToBase64String(JsonSerializer.SerializeToUtf8Bytes(listItem)));
             }
             catch (Exception ex)
             {
-                await _jsRuntime.InvokeVoidAsync("localStorage.removeItem", $"{CookieName.FiltrRequest}.{filtrName.ToLower()}");
+                if (!string.IsNullOrEmpty(filtrName))
+                {
+                    await _jsRuntime.InvokeVoidAsync("localStorage.removeItem", $"{CookieName.FiltrRequest}.{filtrName.ToLower()}");
+                }
                 Console.WriteLine(ex.Message);
             }
             return cookieItem?.Filters;
         }
 
-        public async Task<FiltrRequestItem> FiltrGetLastRequest(string userName, string filtrName)
+        public async Task<FiltrRequestItem> FiltrGetLastRequest(string? userName, string? filtrName)
         {
             try
+            {
+                if (!string.IsNullOrEmpty(userName) && !string.IsNullOrEmpty(filtrName))
+                {
+                    var base64 = await _jsRuntime.InvokeAsync<string?>("localStorage.getItem", $"{CookieName.FiltrRequest}.{filtrName.ToLower()}");
+                    List<FiltrCookieItem> listItem = new();
+                    if (!string.IsNullOrEmpty(base64))
+                    {
+                        listItem = JsonSerializer.Deserialize<List<FiltrCookieItem>>(Convert.FromBase64String(base64)) ?? new();
+                    }
+                    FiltrCookieItem cookieItem = listItem.FirstOrDefault(x => x.UserName == userName) ?? new(userName);
+                    return cookieItem.Filters ?? new();
+                }
+            }
+            catch (Exception ex)
+            {
+                if (!string.IsNullOrEmpty(filtrName))
+                {
+                    await _jsRuntime.InvokeVoidAsync("localStorage.removeItem", $"{CookieName.FiltrRequest}.{filtrName.ToLower()}");
+                }
+
+                Console.WriteLine(ex.Message);
+            }
+            return new();
+        }
+
+        public async Task FiltrClearLastRequest(string userName, string filtrName)
+        {
+            if (!string.IsNullOrEmpty(userName) && !string.IsNullOrEmpty(filtrName))
             {
                 var base64 = await _jsRuntime.InvokeAsync<string?>("localStorage.getItem", $"{CookieName.FiltrRequest}.{filtrName.ToLower()}");
                 List<FiltrCookieItem> listItem = new();
@@ -180,37 +204,19 @@ namespace BlazorLibrary.ServiceColection
                 {
                     listItem = JsonSerializer.Deserialize<List<FiltrCookieItem>>(Convert.FromBase64String(base64)) ?? new();
                 }
-                FiltrCookieItem cookieItem = listItem.FirstOrDefault(x => x.UserName == userName) ?? new(userName);
-                return cookieItem.Filters ?? new();
-            }
-            catch
-            {
-                await _jsRuntime.InvokeVoidAsync("localStorage.removeItem", $"{CookieName.FiltrRequest}.{filtrName.ToLower()}");
-                return new();
-            }
+                var cookieItem = listItem.FirstOrDefault(x => x.UserName == userName);
 
-        }
+                if (cookieItem != null)
+                {
+                    cookieItem.Filters.HistoryRequest.Clear();
+                    cookieItem.Filters.LastRequest = null;
 
-        public async Task FiltrClearLastRequest(string userName, string filtrName)
-        {
-            var base64 = await _jsRuntime.InvokeAsync<string?>("localStorage.getItem", $"{CookieName.FiltrRequest}.{filtrName.ToLower()}");
-            List<FiltrCookieItem> listItem = new();
-            if (!string.IsNullOrEmpty(base64))
-            {
-                listItem = JsonSerializer.Deserialize<List<FiltrCookieItem>>(Convert.FromBase64String(base64)) ?? new();
-            }
-            var cookieItem = listItem.FirstOrDefault(x => x.UserName == userName);
-
-            if (cookieItem != null)
-            {
-                cookieItem.Filters.HistoryRequest.Clear();
-                cookieItem.Filters.LastRequest = null;
-
-                await _jsRuntime.InvokeVoidAsync("localStorage.setItem", $"{CookieName.FiltrRequest}.{filtrName.ToLower()}", Convert.ToBase64String(JsonSerializer.SerializeToUtf8Bytes(listItem)));
+                    await _jsRuntime.InvokeVoidAsync("localStorage.setItem", $"{CookieName.FiltrRequest}.{filtrName.ToLower()}", Convert.ToBase64String(JsonSerializer.SerializeToUtf8Bytes(listItem)));
+                }
             }
         }
 
-        public async Task<SndSetting?> GetSndSettingEx(SoundSettingsType type)
+        public async Task<Models.SndSetting?> GetSndSettingEx(SoundSettingsType type)
         {
             string? key = null;
             if (type == SoundSettingsType.RepSoundSettingType)
@@ -231,7 +237,7 @@ namespace BlazorLibrary.ServiceColection
                         GetSndSettingExResponse settings = GetSndSettingExResponse.Parser.ParseFrom(ByteString.FromBase64(byteArray));
                         if (settings.Info?.Length > 0)
                         {
-                            SndSetting response = new(settings.Info.ToByteArray());
+                            Models.SndSetting response = new(settings.Info.ToByteArray());
                             response.Interfece = string.IsNullOrEmpty(settings.Interface) ? null : settings.Interface;
                             return response;
                         }
@@ -246,7 +252,7 @@ namespace BlazorLibrary.ServiceColection
             return null;
         }
 
-        public async Task SaveSndSettingEx(SoundSettingsType type, SndSetting settings)
+        public async Task SaveSndSettingEx(SoundSettingsType type, Models.SndSetting settings)
         {
             string? key = null;
             if (type == SoundSettingsType.RepSoundSettingType)
@@ -269,6 +275,14 @@ namespace BlazorLibrary.ServiceColection
             {
                 await _jsRuntime.InvokeVoidAsync("localStorage.removeItem", key);
                 Console.WriteLine($"Error SaveSndSettingEx, message {ex.Message}");
+            }
+        }
+
+        void SemaphoreRelease()
+        {
+            if (semaphore.CurrentCount == 0)
+            {
+                semaphore.Release();
             }
         }
     }

@@ -6,7 +6,7 @@
 
     @if (ChildContent != null)
     {
-        <div @onmouseout="()=>IsMouseMovingChild=false" @onmouseover="()=>IsMouseMovingChild=true" class="dropdown-menu dropdown-menu-dark @(IsViewMenuTop?"bottom-100":"top-100") @(IsViewAddMenu?"d-block":"")" @onclick="@(()=>IsViewAddMenu=false)" style="max-width:500px;">
+        <div @onmouseout="()=>IsMouseMovingChild=false" @onmouseover="()=>IsMouseMovingChild=true" class="dropdown-menu dropdown-menu-dark @(IsViewMenuTop?"bottom-100":"top-100") @(IsViewMenuLeft?"start-0":"end-0") @(IsViewAddMenu?"d-block":"")" @onclick="@(()=>IsViewAddMenu=false)" style="max-width:500px;">
             @ChildContent
         </div>
     }
@@ -24,6 +24,9 @@
 
     [Parameter]
     public bool IsViewMenuTop { get; set; } = true;
+
+    [Parameter]
+    public bool IsViewMenuLeft { get; set; } = true;
 
     bool IsViewAddMenu = false;
 

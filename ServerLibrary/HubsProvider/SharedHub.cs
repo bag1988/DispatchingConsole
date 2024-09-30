@@ -1,22 +1,17 @@
-﻿using System.Net;
-using System.Threading.Channels;
+﻿using System.Threading.Channels;
 using Google.Protobuf;
 using Google.Protobuf.WellKnownTypes;
 using Grpc.Core;
 using Microsoft.AspNetCore.Authorization;
-using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.SignalR;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Primitives;
 using RemoteConnectLibrary;
-using SensorM.GsoCommon.ServerLibrary;
 using ServerLibrary.Extensions;
 using SharedLibrary;
 using SharedLibrary.GlobalEnums;
-using SharedLibrary.Utilities;
 using SMDataServiceProto.V1;
-using static Google.Rpc.Context.AttributeContext.Types;
 using static SMSSGsoProto.V1.SMSSGso;
 using static SyntezServiceProto.V1.SyntezService;
 
@@ -26,6 +21,7 @@ namespace ServerLibrary.HubsProvider
     public class SharedHub : Hub
     {
         readonly SMSSGsoClient _SMSGso;
+        
         readonly SyntezServiceClient _TtsClient;
         readonly string BackupFolder;
         readonly GateServiceProto.V1.GateService.GateServiceClient _SMGate;
@@ -78,7 +74,7 @@ namespace ServerLibrary.HubsProvider
 
                 if (System.IO.File.Exists(FileName))
                     return false;
-                using (var fs = new FileStream(FileName, FileMode.Create, FileAccess.Write, FileShare.Read))
+                using (var fs = new FileStream(FileName, FileMode.Create, FileAccess.Write, FileShare.Read, 1_000_000))
                 {
                     while (await stream.WaitToReadAsync(Context.ConnectionAborted))
                     {
@@ -121,7 +117,7 @@ namespace ServerLibrary.HubsProvider
                 if (System.IO.File.Exists(FileName))
                     return 2;
 
-                using (var fs = new FileStream(FileName, FileMode.Create, FileAccess.Write, FileShare.Read))
+                using (var fs = new FileStream(FileName, FileMode.Create, FileAccess.Write, FileShare.Read, 1_000_000))
                 {
                     while (await stream.WaitToReadAsync(Context.ConnectionAborted))
                     {
@@ -205,7 +201,7 @@ namespace ServerLibrary.HubsProvider
                         _logger.WriteLogError(ex, $"{nameof(ConvertSoundToTmpFile)}");
                     }
                 });
-                using (var write = new FileStream(FileTemp, FileMode.Create))
+                using (var write = new FileStream(FileTemp, FileMode.Create, FileAccess.Write, FileShare.Read, 1_000_000))
                 {
                     while (await call.ResponseStream.MoveNext(Context.ConnectionAborted))
                     {
@@ -251,7 +247,7 @@ namespace ServerLibrary.HubsProvider
                 {
                     Directory.CreateDirectory(DirectoryTmp);
                 }
-                using (var write = new FileStream(FileTemp, FileMode.Create))
+                using (var write = new FileStream(FileTemp, FileMode.Create, FileAccess.Write, FileShare.Read, 1_000_000))
                 {
                     while (await stream.WaitToReadAsync())
                     {
@@ -368,15 +364,11 @@ namespace ServerLibrary.HubsProvider
             {
                 var context = Context.GetHttpContext();
                 var userName = context?.User.Identity?.Name ?? "NoAuthorize";
-                var urlConnect = IpAddressUtilities.GetAuthority(context?.Connection.RemoteIpAddress?.MapToIPv4().ToString());
+                var urlConnect = context?.Connection.RemoteIpAddress?.MapToIPv4().ToString();
                 StringValues valuesUi = new();
                 var idUi = context?.Request.Query.TryGetValue(nameof(CookieName.AppId), out valuesUi);
-                Guid.TryParse(valuesUi.FirstOrDefault(), out var guidUi);
-
+                Guid.TryParse(valuesUi.FirstOrDefault(), out var guidUi);               
                 _logger.LogTrace(@"Новое подключение к хабу от {forUrl}, пользователь {userName}, guid {guid}, назначенный ID {Id}, локальный хост {Host}", urlConnect, userName, guidUi, Context.ConnectionId, context?.Request.Host);
-
-                if (!string.IsNullOrEmpty(urlConnect))
-                    AddToGroup(urlConnect).Wait();
             }
             catch (Exception ex)
             {
@@ -390,49 +382,24 @@ namespace ServerLibrary.HubsProvider
         /// </summary>
         /// <param name="exception"></param>
         /// <returns></returns>
-        public override Task OnDisconnectedAsync(Exception? exception)
+        public override Task OnDisconnectedAsync(Exception? OnDisconnectedAsync)
         {
             try
             {
                 var context = Context.GetHttpContext();
-                var urlConnect = IpAddressUtilities.GetAuthority(context?.Connection.RemoteIpAddress?.MapToIPv4().ToString());
+                var urlConnect = context?.Connection.RemoteIpAddress?.MapToIPv4().ToString();
                 StringValues valuesUi = new();
                 var idUi = context?.Request.Query.TryGetValue(nameof(CookieName.AppId), out valuesUi);
-                Guid.TryParse(valuesUi.FirstOrDefault(), out var guidUi);
+                Guid.TryParse(valuesUi.FirstOrDefault(), out var guidUi);               
                 _logger.LogTrace(@"Закрыто подключение к хабу для {forUrl}, guid {guid}, назначенный ID {Id}, локальный хост {Host}", urlConnect, guidUi, Context.ConnectionId, context?.Request.Host);
-                RemoveFromGroup(urlConnect).Wait();
-
             }
             catch (Exception ex)
             {
                 _logger.WriteLogError(ex, nameof(OnDisconnectedAsync));
             }
-            return base.OnConnectedAsync();
+            return base.OnDisconnectedAsync(OnDisconnectedAsync);
         }
 
-        public async Task AddToGroup(string groupName)
-        {
-            try
-            {
-                await Groups.AddToGroupAsync(Context.ConnectionId, groupName.Replace(".", "_"));
-            }
-            catch (Exception ex)
-            {
-                _logger.LogError(ex, nameof(AddToGroup));
-            }
-        }
-
-        public async Task RemoveFromGroup(string groupName)
-        {
-            try
-            {
-                await Groups.RemoveFromGroupAsync(Context.ConnectionId, groupName.Replace(".", "_"));
-            }
-            catch (Exception ex)
-            {
-                _logger.LogError(ex, nameof(RemoveFromGroup));
-            }
-        }
-
+       
     }
 }

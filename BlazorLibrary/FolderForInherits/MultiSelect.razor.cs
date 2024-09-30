@@ -1,5 +1,4 @@
-﻿using System.Numerics;
-using BlazorLibrary.Helpers;
+﻿using BlazorLibrary.Helpers;
 using Microsoft.AspNetCore.Components;
 using Microsoft.AspNetCore.Components.Web;
 using Microsoft.JSInterop;

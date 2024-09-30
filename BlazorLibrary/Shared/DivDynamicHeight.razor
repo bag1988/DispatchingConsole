@@ -1,0 +1,4 @@
+﻿@inject ILogger<DivDynamicHeight> _logger
+<div @ref="div" class="table-responsive @SetClass" style="min-height: 400px; height: @MaxHeight">
+    @ChildContent
+</div>

@@ -50,7 +50,7 @@ function getMedia(constraints) {
         resolve(mediaStream);
       })
       .catch(function (err) {
-        console.log((new Date()).toLocaleString(), err.name + ": " + err.message);
+        console.error((new Date()).toLocaleString(), "Error get user media", err.name + ": " + err.message);
         resolve(null);
       });
   });
@@ -100,7 +100,7 @@ export async function ChangeLocalStream(typeChange) {
     }
   }
   catch (e) {
-    console.log((new Date()).toLocaleString(), "Error change local stream", e);
+    console.error((new Date()).toLocaleString(), "Error change local stream", e);
   }
   return false;
 }
@@ -133,7 +133,7 @@ export async function StartOfferForChangeStream(forUrl, forUser, keyChatRoom) {
     }
   }
   catch (e) {
-    console.log((new Date()).toLocaleString(), "Error add video to local stream", e);
+    console.error((new Date()).toLocaleString(), "Error add video to local stream", e);
   }
   return null;
 }
@@ -150,7 +150,7 @@ export async function StartAnswerForChangeStream(forUrl, forUser, keyChatRoom, d
     }
   }
   catch (e) {
-    console.log((new Date()).toLocaleString(), "Error add video to local stream", e);
+    console.error((new Date()).toLocaleString(), "Error add video to local stream", e);
   }
   return null;
 }
@@ -168,7 +168,7 @@ async function startLocalStream(keyChatRoom) {
 
     if (!localPlayer.srcObject && localStream) {
 
-      //console.log("startLocalStream ------------------------------");
+      //console.debug("startLocalStream ------------------------------");
 
       localPlayer.srcObject = localStream;
       localPlayer.classList.remove("d-none");
@@ -179,7 +179,7 @@ async function startLocalStream(keyChatRoom) {
     }
   }
   catch (e) {
-    console.log("Error start local stream", e);
+    console.error((new Date()).toLocaleString(), "Error start local stream", e);
   }
 }
 
@@ -196,14 +196,14 @@ async function startRecord(keyChatRoom) {
     }
   }
   catch (e) {
-    console.log(e);
+    console.error((new Date()).toLocaleString(), "Error start record", e);
   }
 }
 
 async function createPeerConnection(forUrl, forUser, keyChatRoom) {
 
   try {
-    //console.log((new Date()).toLocaleString(), "Create P2P ", forUrl);
+    //console.debug((new Date()).toLocaleString(), "Create P2P ", `${forUrl}-${forUser}`);
 
     if (peerConnectionArray.has(GetNameKey(forUrl, forUser))) return;
 
@@ -222,23 +222,22 @@ async function createPeerConnection(forUrl, forUser, keyChatRoom) {
       localStream.getTracks().forEach((track) => {
         newPeerConnection.addTrack(track, localStream);
       });
-      //console.log((new Date()).toLocaleString(), "Add P2P for ", forUrl);
+      //console.debug((new Date()).toLocaleString(), "Add P2P for ", `${forUrl}-${forUser}`);
       peerConnectionArray.set(GetNameKey(forUrl, forUser), newPeerConnection);
     }
     else
       newPeerConnection.close();
   }
   catch (e) {
-    console.log((new Date()).toLocaleString(), "Error create P2P", e);
+    console.error((new Date()).toLocaleString(), "Error create P2P", e);
   }
 }
 
 export async function callAction(forUrl, forUser, keyChatRoom, isvideo = false) {
   try {
-    //console.log((new Date()).toLocaleString(), " >= callAction", forUrl);
-
+    console.debug((new Date()).toLocaleString(), " => callAction", `${forUrl}-${forUser}`);
     if (peerConnectionArray.has(GetNameKey(forUrl, forUser))) {
-      //console.log((new Date()).toLocaleString(), " >= changeOffer", forUrl);
+      console.debug((new Date()).toLocaleString(), " => callAction => changeOffer", `${forUrl}-${forUser}`);
       return await StartOfferForChangeStream(forUrl, forUser, keyChatRoom);
     }
     else {
@@ -250,7 +249,7 @@ export async function callAction(forUrl, forUser, keyChatRoom, isvideo = false) 
       await createPeerConnection(forUrl, forUser, keyChatRoom);
 
       if (!peerConnectionArray.has(GetNameKey(forUrl, forUser))) {
-        //console.log((new Date()).toLocaleString(), "error get peerConnection for", forUrl);
+        //console.error((new Date()).toLocaleString(), "error get peerConnection for", forUrl);
         return null;
       }
 
@@ -262,7 +261,7 @@ export async function callAction(forUrl, forUser, keyChatRoom, isvideo = false) 
     }
   }
   catch (e) {
-    console.log((new Date()).toLocaleString(), "Error callAction", e);
+    console.error((new Date()).toLocaleString(), "Error callAction", e);
   }
   return null;
 }
@@ -271,28 +270,27 @@ export async function callAction(forUrl, forUser, keyChatRoom, isvideo = false) 
 // setRemoteDescription is called, the addStream event trigger on the connection.
 export async function processAnswer(forUrl, forUser, descriptionText) {
   try {
-    //console.log((new Date()).toLocaleString(), " => processAnswer: peerConnection setRemoteDescription start.", forUrl ?? "error");
-
+    console.debug((new Date()).toLocaleString(), " => processAnswer: peerConnection setRemoteDescription start:", `${forUrl}-${forUser}`);
     if (!peerConnectionArray.has(GetNameKey(forUrl, forUser))) return;
 
     let description = JSON.parse(descriptionText);
 
     await peerConnectionArray.get(GetNameKey(forUrl, forUser)).setRemoteDescription(description);
 
-    //console.log((new Date()).toLocaleString(), "peerConnection.setRemoteDescription(description) success", forUrl);
+    console.debug((new Date()).toLocaleString(), " => peerConnection setRemoteDescription success:", `${forUrl}-${forUser}`);
   }
   catch (e) {
-    console.log((new Date()).toLocaleString(), "Error processAnswer", GetNameKey(forUrl, forUser), e);
+    console.error((new Date()).toLocaleString(), "Error processAnswer", GetNameKey(forUrl, forUser), e);
   }
 }
 
 //Создаем ответ для подключения
 export async function processOffer(forUrl, forUser, keyChatRoom, descriptionText, isvideo = false) {
   try {
-    //console.log((new Date()).toLocaleString(), " >= processOffer", forUrl);
+    console.debug((new Date()).toLocaleString(), " => processOffer:", `${forUrl}-${forUser}`);
     if (peerConnectionArray.has(GetNameKey(forUrl, forUser))) {
-      //console.log((new Date()).toLocaleString(), " >= changeAnswer", forUrl);
-      return await StartAnswerForChangeStream(descriptionText, forUrl, keyChatRoom);
+      console.debug((new Date()).toLocaleString(), " => changeAnswer:", `${forUrl}-${forUser}`);
+      return await StartAnswerForChangeStream(forUrl, forUser, keyChatRoom, descriptionText);
     }
     else {
       mediaStreamConstraints = {
@@ -300,20 +298,27 @@ export async function processOffer(forUrl, forUser, keyChatRoom, descriptionText
         video: isvideo
       };
 
-      await createPeerConnection(forUrl, forUser, keyChatRoom);
+      return new Promise((resolve) => {
+        navigator.locks.request(
+          "createPeerConnection",
+          { mode: "exclusive" },
+          async (lock) => {
+            await createPeerConnection(forUrl, forUser, keyChatRoom);
+            if (peerConnectionArray.has(GetNameKey(forUrl, forUser))) {
+              let description = JSON.parse(descriptionText);
+              await peerConnectionArray.get(GetNameKey(forUrl, forUser)).setRemoteDescription(description);
+              let answer = await peerConnectionArray.get(GetNameKey(forUrl, forUser)).createAnswer();
+              await peerConnectionArray.get(GetNameKey(forUrl, forUser)).setLocalDescription(answer);
+              resolve(JSON.stringify(answer));
+            }
+          }
+        );
+      });
 
-      if (peerConnectionArray.has(GetNameKey(forUrl, forUser))) {
-        let description = JSON.parse(descriptionText);
-        await peerConnectionArray.get(GetNameKey(forUrl, forUser)).setRemoteDescription(description);
-        let answer = await peerConnectionArray.get(GetNameKey(forUrl, forUser)).createAnswer();
-        await peerConnectionArray.get(GetNameKey(forUrl, forUser)).setLocalDescription(answer);
-
-        return JSON.stringify(answer);
-      }
     }
   }
   catch (e) {
-    console.log((new Date()).toLocaleString(), "Error processOffer", GetNameKey(forUrl, forUser), e);
+    console.error((new Date()).toLocaleString(), "Error processOffer", `${forUrl}-${forUser}`, e);
   }
   closePeerConnection(forUrl, forUser);
   return null;
@@ -321,29 +326,37 @@ export async function processOffer(forUrl, forUser, keyChatRoom, descriptionText
 
 export async function processCandidate(forUrl, forUser, candidateText) {
   try {
-    //console.log((new Date()).toLocaleString(), " >= processCandidate: peerConnection addIceCandidate start.", forUrl ?? "error", ". Is find P2P ", peerConnectionArray.has(forUrl));
-    if (!peerConnectionArray.has(GetNameKey(forUrl, forUser))) return;
-
-    let candidate = JSON.parse(candidateText);
-    await peerConnectionArray.get(GetNameKey(forUrl, forUser)).addIceCandidate(candidate);
+    await navigator.locks.request(
+      "createPeerConnection",
+      { mode: "exclusive" },
+      async (lock) => {
+        console.debug((new Date()).toLocaleString(), " => processCandidate: peerConnection addIceCandidate start.", `${forUrl}-${forUser}`, ". Is find P2P ", peerConnectionArray.has(GetNameKey(forUrl, forUser)));
+        if (!peerConnectionArray.has(GetNameKey(forUrl, forUser))) return;
+        let candidate = JSON.parse(candidateText);
+        await peerConnectionArray.get(GetNameKey(forUrl, forUser)).addIceCandidate(candidate);
+      }
+    );
   }
   catch (e) {
-    console.log((new Date()).toLocaleString(), "Error processCandidate", GetNameKey(forUrl, forUser), e);
+    console.error((new Date()).toLocaleString(), "Error processCandidate", `${forUrl}-${forUser}`, e);
   }
 }
 
 // Handles hangup action: ends up call, closes connections and resets peers.
 export function closePeerConnection(forUrl, forUser) {
   try {
-    videoMixer.removeVideo(GetNameKey(forUrl, forUser));
+    console.debug((new Date()).toLocaleString(), " => closePeerConnection:", `${forUrl}-${forUser}`);
+    if ('removeVideo' in videoMixer) {
+      videoMixer.removeVideo(GetNameKey(forUrl, forUser));
+    }
     if (peerConnectionArray.has(GetNameKey(forUrl, forUser))) {
       peerConnectionArray.get(GetNameKey(forUrl, forUser)).close();
       peerConnectionArray.delete(GetNameKey(forUrl, forUser));
-      //console.log((new Date()).toLocaleString(), forUrl, "Ending call. P2P active ", peerConnectionArray.size);
+      //console.debug((new Date()).toLocaleString(), `${forUrl}-${forUser}`, "Ending call. P2P active ", peerConnectionArray.size);
     }
     let remoteVideoArray = getRemoteArrayPlayer();
     if (remoteVideoArray) {
-      //console.log((new Date()).toLocaleString(), "remove video for url ", forUrl);
+      //console.debug((new Date()).toLocaleString(), "remove video for url:", `${forUrl}-${forUser}`);
       remoteVideoArray.querySelector('[for="' + GetNameKey(forUrl, forUser) + '"]')?.remove();
 
       if (remoteVideoArray.querySelectorAll("video").length == 0) {
@@ -367,7 +380,19 @@ export function closePeerConnection(forUrl, forUser) {
     }
 
     //если нет активных подключений, закрываем локальный стрим
-    if (peerConnectionArray.size == 0 && localStream) {
+    if (peerConnectionArray.size == 0) {
+      StopLocalStream();
+    }
+  }
+  catch (e) {
+    console.error((new Date()).toLocaleString(), "Error closePeerConnection", e);
+  }
+}
+
+export function StopLocalStream() {
+  try {
+    if (localStream) {
+      console.debug((new Date()).toLocaleString(), "Закрываем локальный стрим");
       var localPlayer = getLocalPlayer();
       if (localPlayer) {
         localPlayer.srcObject = null;
@@ -388,13 +413,14 @@ export function closePeerConnection(forUrl, forUser) {
     }
   }
   catch (e) {
-    console.log((new Date()).toLocaleString(), "Error closePeerConnection", e);
+    console.error((new Date()).toLocaleString(), "Error StopLocalStream", e);
   }
 }
 
 // Handles remote MediaStream success by handing the stream to the blazor component.
 function gotRemoteMediaStream(event, forUrl, forUser, keyChatRoom) {
   try {
+    console.debug((new Date()).toLocaleString(), " => gotRemoteMediaStream:", `${forUrl}-${forUser}`);
     let remoteVideoArray = getRemoteArrayPlayer();
     if (remoteVideoArray) {
       let remoteVideo = remoteVideoArray.querySelector('[for="' + GetNameKey(forUrl, forUser) + '"]');
@@ -443,7 +469,7 @@ function gotRemoteMediaStream(event, forUrl, forUser, keyChatRoom) {
       }
 
       remoteVideo.srcObject = event.stream;
-      //console.log("gotRemoteMediaStream", forUrl, forUser);
+      //console.debug("gotRemoteMediaStream", forUrl, forUser);
       videoMixer.addVideos(remoteVideo);
 
       let videoTrack = event.stream.getVideoTracks();
@@ -453,7 +479,7 @@ function gotRemoteMediaStream(event, forUrl, forUser, keyChatRoom) {
       }
       else {
         event.stream.addEventListener("addtrack", (e) => {
-          //console.log((new Date()).toLocaleString(), "addtrack", event);
+          //console.debug((new Date()).toLocaleString(), "addtrack", event);
           if (e.track.kind == 'video') {
             SetEventForVideoTrack(forUrl, forUser, e.track);
           }
@@ -462,7 +488,7 @@ function gotRemoteMediaStream(event, forUrl, forUser, keyChatRoom) {
     }
   }
   catch (e) {
-    console.log((new Date()).toLocaleString(), "Error gotRemoteMediaStream", e);
+    console.error((new Date()).toLocaleString(), "Error gotRemoteMediaStream", e);
   }
 }
 
@@ -476,19 +502,19 @@ function SetEventForVideoTrack(forUrl, forUser, videoTrack) {
           try {
             videoElem.srcObject.removeTrack(event.currentTarget);
             videoElem.load();
-            //console.log((new Date()).toLocaleString(), "Communication onmute", videoElem.srcObject.getTracks());
+            //console.debug((new Date()).toLocaleString(), "Communication onmute", videoElem.srcObject.getTracks());
           }
           catch (e) {
-            console.log((new Date()).toLocaleString(), "Communication error onmute", e);
+            console.error((new Date()).toLocaleString(), "Communication error onmute", e);
           }
         };
         videoTrack.onunmute = (event) => {
           try {
             videoElem.srcObject.addTrack(event.currentTarget);
-            //console.log((new Date()).toLocaleString(), "Communication onunmute", videoElem.srcObject.getTracks());
+            //console.debug((new Date()).toLocaleString(), "Communication onunmute", videoElem.srcObject.getTracks());
           }
           catch (e) {
-            console.log((new Date()).toLocaleString(), "Communication error onunmute", e);
+            console.error((new Date()).toLocaleString(), "Communication error onunmute", e);
           }
         };
       }
@@ -500,12 +526,12 @@ async function handleConnection(event, forUrl, forUser, keyChatRoom) {
   try {
     const iceCandidate = event.candidate;
     if (iceCandidate) {
-      //console.log((new Date()).toLocaleString(), " => SendCandidate for ", forUrl);
+      console.debug((new Date()).toLocaleString(), " => SendCandidate:", `${forUrl}-${forUser}`);
       await dotNet.invokeMethodAsync("SendCandidateJs", forUrl, forUser, keyChatRoom, JSON.stringify(iceCandidate));
     }
   }
   catch (e) {
-    console.log((new Date()).toLocaleString(), "Error handleConnection", e);
+    console.error((new Date()).toLocaleString(), "Error handleConnection", e);
   }
 }
 
@@ -513,7 +539,7 @@ async function handleConnection(event, forUrl, forUser, keyChatRoom) {
 function handleConnectionChange(event, forUrl, forUser, keyChatRoom) {
   try {
     const peerConnection = event.target;
-    //console.log((new Date()).toLocaleString(), `${forUrl} peerConnection ICE state: ${peerConnection.iceConnectionState}.`);
+    console.debug((new Date()).toLocaleString(), ` => peerConnection ICE state: ${peerConnection.iceConnectionState}.`, `${forUrl}-${forUser}`);
 
     if (peerConnection.iceConnectionState == 'disconnected' || peerConnection.iceConnectionState == 'closed') {
       dotNet.invokeMethodAsync("DisconnectP2P", forUrl, forUser, keyChatRoom);
@@ -523,7 +549,7 @@ function handleConnectionChange(event, forUrl, forUser, keyChatRoom) {
     }
   }
   catch (e) {
-    console.log((new Date()).toLocaleString(), "Error handleConnectionChange", e);
+    console.error((new Date()).toLocaleString(), "Error handleConnectionChange", e);
   }
 }
 

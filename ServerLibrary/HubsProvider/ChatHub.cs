@@ -5,7 +5,6 @@ using System.Text;
 using System.Text.Json;
 using System.Text.RegularExpressions;
 using System.Threading.Channels;
-using Dapr.Client;
 using Google.Protobuf.WellKnownTypes;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.SignalR;
@@ -14,10 +13,10 @@ using Microsoft.Extensions.Localization;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Primitives;
 using PodsProto.V1;
-using ReplaceLibrary;
-using SensorM.GsoCommon.ServerLibrary;
+using LocalizationLibrary;
+using SensorM.GsoCore.RemoteConnectLibrary;
+using SensorM.GsoCore.SharedLibrary.Interfaces;
 using ServerLibrary.Extensions;
-using SharedLibrary;
 using SharedLibrary.Extensions;
 using SharedLibrary.GlobalEnums;
 using SharedLibrary.Models;
@@ -31,22 +30,22 @@ using ChatMessage = SharedLibrary.Models.ChatMessage;
 using ConnectInfo = SharedLibrary.Models.ConnectInfo;
 using StateCall = SharedLibrary.Models.StateCall;
 using TypeConnect = SharedLibrary.Models.TypeConnect;
+using SensorM.GsoCommon.ServerLibrary.Models;
 
 namespace ServerLibrary.HubsProvider
 {
     [AllowAnonymous]
-    public class ChatHub : Hub
+    public class ChatHub : Hub<IChatHub>
     {
         private readonly ILogger<ChatHub> _logger;
-        private readonly DaprClient _daprClient;
         private readonly static ConnectionMapping _connections = new();
-        private readonly static CreateHttpClient _httpClient = new();
+        private readonly RemoteHttpProvider _httpClient;
         readonly PodsProto.V1.PodsService.PodsServiceClient _pods;
         readonly SMSSGsoClient _SMSGso;
         readonly SMDataServiceProto.V1.SMDataService.SMDataServiceClient _SMData;
         readonly StaffDataClient _StaffData;
 
-        readonly IStringLocalizer<DispatchingReplace> DispRep;
+        readonly IStringLocalizer<DispatchingLocalization> DispRep;
 
         /// <summary>
         /// Пропущенный вызов, ключ имя пользователя
@@ -78,12 +77,11 @@ namespace ServerLibrary.HubsProvider
         static List<ChatForUser> AllChats { get; } = new();
 
         readonly string DirectoryTmp;
-        readonly int _AppHttpsPort = 2291;
 
-        public ChatHub(ILogger<ChatHub> logger, DaprClient daprClient, IStringLocalizer<DispatchingReplace> dispRep, SMSSGsoClient sMSGso, StaffDataClient staffData, SMDataService.SMDataServiceClient sMData, PodsProto.V1.PodsService.PodsServiceClient pods, IConfiguration conf)
+
+        public ChatHub(ILogger<ChatHub> logger, IStringLocalizer<DispatchingLocalization> dispRep, SMSSGsoClient sMSGso, StaffDataClient staffData, SMDataService.SMDataServiceClient sMData, PodsProto.V1.PodsService.PodsServiceClient pods, IConfiguration conf, RemoteHttpProvider httpClient)
         {
             _logger = logger;
-            _daprClient = daprClient;
             DispRep = dispRep;
             _SMSGso = sMSGso;
             _StaffData = staffData;
@@ -91,7 +89,7 @@ namespace ServerLibrary.HubsProvider
             _pods = pods;
 
             DirectoryTmp = conf.GetValue<string?>("PodsArhivePath") ?? "PodsArhivePath";
-            _AppHttpsPort = conf.GetValue<int?>("DISPATCHINGCONSOLE_APP_HTTPS_PORT") ?? _AppHttpsPort;
+            _httpClient = httpClient;
         }
 
         PodsProto.V1.ChatInfo ToProtoModel(ChatInfo model)
@@ -150,7 +148,7 @@ namespace ServerLibrary.HubsProvider
 
                 if (System.IO.File.Exists(FileName))
                     return false;
-                using (var fs = new FileStream(FileName, FileMode.Create, FileAccess.Write, FileShare.Read))
+                using (var fs = new FileStream(FileName, FileMode.Create, FileAccess.Write, FileShare.Read, 1_000_000))
                 {
                     while (await stream.WaitToReadAsync(Context.ConnectionAborted))
                     {
@@ -395,7 +393,8 @@ namespace ServerLibrary.HubsProvider
                 var ipList = await GetLocalHostUrl();
                 if (!string.IsNullOrEmpty(ipList))
                 {
-                    return $"{ipList}:{_AppHttpsPort}";
+                    var portInfo = await _SMSGso.GetAppPortsAsync(new BoolValue() { Value = true });
+                    return $"{ipList}:{portInfo?.DISPATCHINGCONSOLEAPPPORT}";
                 }
             }
             catch (Exception ex)
@@ -435,9 +434,10 @@ namespace ServerLibrary.HubsProvider
                     var activeUser = GetConnectUsers();
                     if (StaffId > 0)
                     {
-                        AuthorityUrl = $"{AuthorityUrl}:{_AppHttpsPort}";
+                        var portInfo = await _SMSGso.GetAppPortsAsync(new BoolValue() { Value = true });
+                        AuthorityUrl = $"{AuthorityUrl}:{portInfo?.DISPATCHINGCONSOLEAPPPORT}";
                         ContactInfoList request = new();
-                        request.List.AddRange(response.Array.Select<SMSSGsoProto.V1.UserInfoEx, PodsProto.V1.ContactInfo>(item => new PodsProto.V1.ContactInfo()
+                        request.List.AddRange(response.Array.Select(item => new PodsProto.V1.ContactInfo()
                         {
                             NameCu = CuName,
                             AuthorityUrl = AuthorityUrl,
@@ -495,7 +495,7 @@ namespace ServerLibrary.HubsProvider
                 var r = _connections.GetContextIdForLogin(url, userName);
                 if (r?.Count() > 0)
                 {
-                    await Clients.Clients(r).SendCoreAsync("DeleteChatForKey", new object[] { keyChatRoom });
+                    await Clients.Clients(r).DeleteChatForKey(keyChatRoom);
                 }
             }
             catch (Exception ex)
@@ -518,7 +518,7 @@ namespace ServerLibrary.HubsProvider
                 var r = _connections.GetContextIdForLogin(url, userName);
                 if (r?.Count() > 0)
                 {
-                    await Clients.Clients(r).SendCoreAsync("UpdateChatRoom", new[] { connect });
+                    await Clients.Clients(r).UpdateChatRoom(connect);
                 }
             }
             catch (Exception ex)
@@ -755,7 +755,7 @@ namespace ServerLibrary.HubsProvider
                 var r = _connections.GetContextIdForLogin(forUrl, forUser);
                 if (r?.Count() > 0)
                 {
-                    await Clients.Clients(r).SendCoreAsync("SetInCallingConnect", new[] { conn });
+                    await Clients.Clients(r).SetInCallingConnect(conn);
                 }
             }
             catch (Exception ex)
@@ -1106,19 +1106,14 @@ namespace ServerLibrary.HubsProvider
                 if (!string.IsNullOrEmpty(forUrl) && !IsLocalAuthorityUrl(_getMyKeyConnect?.AuthorityUrl, forUrl))
                 {
                     var absoluteUri = $"https://{forUrl}";
-                    var httpClient = _httpClient.GetHttpClient(absoluteUri);
-                    if (httpClient != null)
+                    try
                     {
-                        try
-                        {
-                            var result = await httpClient.PostAsync($"api/v1/chat/{methodName}", model, cancellationToken);
-                            return result.StatusCode;
-                        }
-                        catch (Exception ex)
-                        {
-                            _httpClient.RemoveClient(absoluteUri);
-                            _logger.WriteLogError(ex, $"{nameof(SendRemoteClient)} for {forUrl}, methodName {methodName}");
-                        }
+                        using var result = await _httpClient.PostAsync(absoluteUri, $"api/v1/chat/{methodName}", model, HttpCompletionOption.ResponseHeadersRead, cancellationToken);
+                        return result.StatusCode;
+                    }
+                    catch (Exception ex)
+                    {
+                        _logger.WriteLogError(ex, $"{nameof(SendRemoteClient)} for {forUrl}, methodName {methodName}");
                     }
                 }
             }
@@ -1230,10 +1225,43 @@ namespace ServerLibrary.HubsProvider
                 if (!string.IsNullOrEmpty(_getMyKeyConnect?.AuthorityUrl) && !string.IsNullOrEmpty(_getMyKeyConnect.UserName))
                 {
                     List<Task> loadTask = new();
+
+                    ///проверка на потерю связи
+                    var conn = GetChatListForUser.FirstOrDefault(x => x.Key == keyChatRoom);
+                    if (conn != null && GetStateCalling(conn) >= StateCall.Calling)
+                    {
+                        bool isClose = false;
+                        if (conn.IdUiConnect != null)
+                        {
+                            var myGuid = _connections.GetGuidForContextId(Context.ConnectionId);
+
+                            var contextId = _connections.GetContextIdForGuid(conn.IdUiConnect);
+
+                            //разные приложения
+                            if (conn.IdUiConnect != myGuid)
+                            {
+                                if (!contextId?.Any() ?? true)
+                                {
+                                    isClose = true;
+                                }
+                            }
+                            else
+                            {
+                                isClose = true;
+                            }
+                        }
+                        else
+                        {
+                            isClose = true;
+                        }
+
+                        if (isClose)
+                        {
+                            SetAllConnItemsState(conn, StateCall.Error);
+                        }
+                    }
                     lock (AllChats)
                     {
-                        var conn = GetChatListForUser.FirstOrDefault(x => x.Key == keyChatRoom);
-
                         _logger.LogTrace(@"Исходящий вызов к {NameRoom}, инициатор {UserName}", conn?.NameRoom, _getMyKeyConnect.UserName);
 
                         if (conn != null)
@@ -1281,7 +1309,7 @@ namespace ServerLibrary.HubsProvider
                             }
                             else
                             {
-                                loadTask.Add(Clients.Clients(Context.ConnectionId).SendCoreAsync("AddMessageForChat", [keyChatRoom, new ChatMessage(_getMyKeyConnect.AuthorityUrl, _getMyKeyConnect.UserName, DispRep["ACTIVE_OTHER_DEVICE"])]));
+                                loadTask.Add(Clients.Clients(Context.ConnectionId).AddMessageForChat(keyChatRoom, new ChatMessage(_getMyKeyConnect.AuthorityUrl, _getMyKeyConnect.UserName, DispRep["ACTIVE_OTHER_DEVICE"])));
                             }
                         }
                     }
@@ -1403,7 +1431,7 @@ namespace ServerLibrary.HubsProvider
         {
             try
             {
-                if (!string.IsNullOrEmpty(model.ForUrl?.UserName) && !string.IsNullOrEmpty(model.RemoteUrl?.UserName))
+                if (!string.IsNullOrEmpty(model.ForUrl?.UserName) && !string.IsNullOrEmpty(model.RemoteUrl?.UserName) && !string.IsNullOrEmpty(model.RemoteUrl.AuthorityUrl))
                 {
                     List<Task> loadTask = new();
                     lock (AllChats)
@@ -1421,8 +1449,7 @@ namespace ServerLibrary.HubsProvider
                                     {
                                         con.State = StateCall.CreateAnswer;
                                         loadTask.Add(LoadAnswerForUrl(model.KeyChatRoom, model.ForUrl.AuthorityUrl, model.ForUrl.UserName, model.RemoteUrl.AuthorityUrl, model.RemoteUrl.UserName, StateCall.CreateAnswer));
-
-                                        loadTask.Add(Clients.Clients(_connections.GetContextIdForGuid(conn.IdUiConnect)).SendCoreAsync("GoConnectionP2P", [model.RemoteUrl.AuthorityUrl, model.RemoteUrl.UserName, model.KeyChatRoom]));
+                                        loadTask.Add(Clients.Clients(_connections.GetContextIdForGuid(conn.IdUiConnect)).GoConnectionP2P(model.RemoteUrl.AuthorityUrl, model.RemoteUrl.UserName, model.KeyChatRoom));
                                     }
                                     else if (model.TypeAnswer == TypeAnswerForJoin.Error)
                                     {
@@ -1533,14 +1560,14 @@ namespace ServerLibrary.HubsProvider
         {
             try
             {
-                if (!string.IsNullOrEmpty(model.ForUrl?.UserName) && !string.IsNullOrEmpty(model.RemoteUrl?.UserName))
+                if (!string.IsNullOrEmpty(model.ForUrl?.UserName) && !string.IsNullOrEmpty(model.RemoteUrl?.UserName) && !string.IsNullOrEmpty(model.RemoteUrl.AuthorityUrl))
                 {
                     List<Task> loadTask = new();
                     lock (AllChats)
                     {
                         var conn = FindChatForKey(model.ForUrl.UserName, model.ForUrl.AuthorityUrl, model.KeyChatRoom);
 
-                        _logger.LogTrace(@"Пришло согласие на установку P2P к комнате {NameRoom}, от {RemoteUrl} для {UserName}", conn?.NameRoom, model.RemoteUrl, model.ForUrl.UserName);
+                        _logger.LogTrace(@"Пришло согласие на установку P2P к комнате {NameRoom}, от {RemoteUrl} для {UserName}", conn?.NameRoom, model.RemoteUrl.AuthorityUrl, model.ForUrl.UserName);
 
                         //общее состояние подключения для P2P не может быть Disconnect
                         if (conn != null)
@@ -1553,7 +1580,7 @@ namespace ServerLibrary.HubsProvider
                                 {
                                     con.State = StateCall.CreateAnswer;
                                     loadTask.Add(LoadAnswerForUrl(model.KeyChatRoom, model.ForUrl.AuthorityUrl, model.ForUrl.UserName, model.RemoteUrl.AuthorityUrl, model.RemoteUrl.UserName, StateCall.CreateAnswer, 10, async (keyRoom, myUser, forUrl, forUser) => await ErrorConnectP2P(keyRoom, myUser, forUrl, forUser)));
-                                    loadTask.Add(Clients.Clients(_connections.GetContextIdForGuid(conn.IdUiConnect)).SendCoreAsync("GoConnectionP2P", [model.RemoteUrl.AuthorityUrl, model.RemoteUrl.UserName, model.KeyChatRoom]));
+                                    loadTask.Add(Clients.Clients(_connections.GetContextIdForGuid(conn.IdUiConnect)).GoConnectionP2P(model.RemoteUrl.AuthorityUrl, model.RemoteUrl.UserName, model.KeyChatRoom));
                                 }
                                 else if (con?.State >= StateCall.CreateP2P)//уже есть подключение с другим устройствам
                                 {
@@ -1634,24 +1661,33 @@ namespace ServerLibrary.HubsProvider
         {
             try
             {
-                if (!string.IsNullOrEmpty(model.ForUrl?.UserName) && !string.IsNullOrEmpty(model.RemoteUrl?.UserName))
+                if (!string.IsNullOrEmpty(model.ForUrl?.UserName) && !string.IsNullOrEmpty(model.RemoteUrl?.UserName) && !string.IsNullOrEmpty(model.RemoteUrl.AuthorityUrl))
                 {
                     List<Task> loadTask = new();
                     lock (AllChats)
                     {
                         var conn = FindChatForKey(model.ForUrl.UserName, model.ForUrl.AuthorityUrl, model.KeyChatRoom);
 
-                        _logger.LogTrace(@"Пришел Offer к комнате {NameRoom}, от {forUrl} для {UserName}", conn?.NameRoom, model.RemoteUrl, model.ForUrl.UserName);
+                        _logger.LogTrace(@"Пришел Offer к комнате {NameRoom}, от {forUrl} для {UserName}", conn?.NameRoom, model.RemoteUrl.AuthorityUrl, model.ForUrl.UserName);
                         if (conn != null)
                         {
                             if (conn.IdUiConnect != null && _connections.AnyGuid(conn.IdUiConnect) && GetStateCalling(conn) >= StateCall.Calling)
                             {
                                 var con = conn.Items.FirstOrDefault(x => x.UserName == model.RemoteUrl.UserName && IpAddressUtilities.CompareForAuthority(x.AuthorityUrl, model.RemoteUrl.AuthorityUrl));
-                                if (con != null && con.State == StateCall.Calling)
+                                if (con != null)
                                 {
-                                    con.State = StateCall.CreateAnswer;
-                                    loadTask.Add(LoadAnswerForUrl(model.KeyChatRoom, model.ForUrl.AuthorityUrl, model.ForUrl.UserName, model.RemoteUrl.AuthorityUrl, model.RemoteUrl.UserName, StateCall.CreateAnswer, 10, async (keyRoom, myUser, forUrl, forUser) => await ErrorConnectP2P(keyRoom, myUser, forUrl, forUser)));
-                                    loadTask.Add(Clients.Clients(_connections.GetContextIdForGuid(conn.IdUiConnect)).SendCoreAsync("SetRemoteOfferForUrl", [model.RemoteUrl.AuthorityUrl, model.RemoteUrl.UserName, model.KeyChatRoom, model.Value]));
+                                    if (con.State == StateCall.Calling)
+                                    {
+                                        con.State = StateCall.CreateAnswer;
+                                        loadTask.Add(LoadAnswerForUrl(model.KeyChatRoom, model.ForUrl.AuthorityUrl, model.ForUrl.UserName, model.RemoteUrl.AuthorityUrl, model.RemoteUrl.UserName, StateCall.CreateAnswer, 10, async (keyRoom, myUser, forUrl, forUser) => await ErrorConnectP2P(keyRoom, myUser, forUrl, forUser)));
+                                        loadTask.Add(Clients.Clients(_connections.GetContextIdForGuid(conn.IdUiConnect)).SetRemoteOfferForUrl(model.RemoteUrl.AuthorityUrl, model.RemoteUrl.UserName, model.KeyChatRoom, model.Value));
+                                    }
+                                    else if (con.State == StateCall.Connected)
+                                    {
+                                        con.State = StateCall.ChangeStream;
+                                        loadTask.Add(LoadAnswerForUrl(model.KeyChatRoom, model.ForUrl.AuthorityUrl, model.ForUrl.UserName, model.RemoteUrl.AuthorityUrl, model.RemoteUrl.UserName, StateCall.ChangeStream, 10, async (keyRoom, myUser, forUrl, forUser) => await ErrorConnectP2P(keyRoom, myUser, forUrl, forUser)));
+                                        loadTask.Add(Clients.Clients(_connections.GetContextIdForGuid(conn.IdUiConnect)).SetChangeRemoteOfferForUrl(model.RemoteUrl.AuthorityUrl, model.RemoteUrl.UserName, model.KeyChatRoom, model.Value));
+                                    }
                                 }
                             }
                             loadTask.Add(SendUpdateChatRoom(model.ForUrl.AuthorityUrl, model.ForUrl.UserName, conn));
@@ -1734,20 +1770,20 @@ namespace ServerLibrary.HubsProvider
         {
             try
             {
-                if (!string.IsNullOrEmpty(model.ForUrl?.UserName) && !string.IsNullOrEmpty(model.RemoteUrl?.UserName))
+                if (!string.IsNullOrEmpty(model.ForUrl?.UserName) && !string.IsNullOrEmpty(model.RemoteUrl?.UserName) && !string.IsNullOrEmpty(model.RemoteUrl.AuthorityUrl))
                 {
                     List<Task> loadTask = new();
                     lock (AllChats)
                     {
                         var conn = FindChatForKey(model.ForUrl.UserName, model.ForUrl.AuthorityUrl, model.KeyChatRoom);
-                        _logger.LogTrace(@"Пришел ответ на Offer к комнате {NameRoom}, от {forUrl} для {UserName}", conn?.NameRoom, model.RemoteUrl, model.ForUrl.UserName);
+                        _logger.LogTrace(@"Пришел ответ на Offer к комнате {NameRoom}, от {forUrl} для {UserName}", conn?.NameRoom, model.RemoteUrl.AuthorityUrl, model.ForUrl.UserName);
                         if (conn != null && conn.IdUiConnect != null && _connections.AnyGuid(conn.IdUiConnect) && GetStateCalling(conn) >= StateCall.CreateP2P)
                         {
                             var con = conn.Items.FirstOrDefault(x => x.UserName == model.RemoteUrl.UserName && IpAddressUtilities.CompareForAuthority(x.AuthorityUrl, model.RemoteUrl.AuthorityUrl));
 
                             if (con != null && (con.State == StateCall.CreateP2P || con.State == StateCall.ChangeStream))
                             {
-                                loadTask.Add(Clients.Clients(_connections.GetContextIdForGuid(conn.IdUiConnect)).SendCoreAsync("SetRemoteAnswerForUrl", new object?[] { model.RemoteUrl.AuthorityUrl, model.RemoteUrl.UserName, model.KeyChatRoom, model.Value }));
+                                loadTask.Add(Clients.Clients(_connections.GetContextIdForGuid(conn.IdUiConnect)).SetRemoteAnswerForUrl(model.RemoteUrl.AuthorityUrl, model.RemoteUrl.UserName, model.KeyChatRoom, model.Value));
                                 if (con.State == StateCall.ChangeStream)
                                 {
                                     con.State = StateCall.Connected;
@@ -1764,6 +1800,94 @@ namespace ServerLibrary.HubsProvider
                 _logger.WriteLogError(ex, nameof(SetAnswerForRemoteClient));
             }
         }
+
+
+        /// <summary>
+        /// Локальный вызов. Запускаем изменение Р2Р подключения
+        /// </summary>
+        /// <param name="forUrl"></param>
+        /// <param name="forUserName"></param>
+        /// <param name="keyChatRoom"></param>
+        /// <param name="newOffer"></param>
+        /// <param name="typeOutCall"></param>
+        /// <returns></returns>
+        public async Task SendChangeRemoteStream(string forUrl, string forUserName, Guid keyChatRoom, string newOffer, TypeConnect typeOutCall)
+        {
+            try
+            {
+                if (string.IsNullOrEmpty(_getMyKeyConnect?.AuthorityUrl) || string.IsNullOrEmpty(_getMyKeyConnect.UserName)) return;
+
+                List<Task> loadTask = new();
+
+                forUrl = IpAddressUtilities.GetAuthority(forUrl);
+                var conn = GetChatListForUser.FirstOrDefault(x => x.Key == keyChatRoom);
+                _logger.LogTrace(@"{MyUser} отправляем новый Offer к комнате {NameRoom}, для {forUrl} пользователь {UserName}", _getMyKeyConnect.UserName, conn?.NameRoom, forUrl, forUserName);
+                if (conn != null && GetStateCalling(conn) >= StateCall.Connected)
+                {
+                    conn.OutTypeConn = typeOutCall;
+                    var con = conn.Items.FirstOrDefault(x => x.UserName == forUserName && IpAddressUtilities.CompareForAuthority(x.AuthorityUrl, forUrl));
+
+                    if (con != null && con.State == StateCall.Connected)
+                    {
+                        con.State = StateCall.ChangeStream;
+                        loadTask.Add(LoadAnswerForUrl(keyChatRoom, _getMyKeyConnect.AuthorityUrl, _getMyKeyConnect.UserName, forUrl, forUserName, StateCall.ChangeStream, 10, async (keyRoom, myUser, forUrl, forUser) => await ErrorConnectP2P(keyRoom, myUser, forUrl, forUser)));
+
+                        var requestConnect = new KeyChatForUrlAndValue() { KeyChatRoom = keyChatRoom, RemoteUrl = _getMyKeyConnect, ForUrl = new(con.AuthorityUrl, con.UserName), Value = newOffer };
+
+                        loadTask.Add(SendLocalOrRemotaRequest(SetChangeRemoteStream, requestConnect, _getMyKeyConnect.AuthorityUrl, forUrl));
+
+                        loadTask.Add(SendUpdateChatRoom(_getMyKeyConnect.AuthorityUrl, _getMyKeyConnect.UserName, conn));
+                    }
+                }
+
+                await Task.WhenAll(loadTask);
+            }
+            catch (Exception ex)
+            {
+                _logger.WriteLogError(ex, nameof(SendChangeRemoteStream));
+            }
+        }
+
+        /// <summary>
+        /// Удаленный вызов. Приходит уведомление о изменении Р2Р подключения
+        /// </summary>
+        /// <param name="model"></param>
+        /// <returns></returns>
+        public async Task SetChangeRemoteStream(KeyChatForUrlAndValue model)
+        {
+            try
+            {
+                if (!string.IsNullOrEmpty(model.ForUrl?.UserName) && !string.IsNullOrEmpty(model.RemoteUrl?.UserName) && !string.IsNullOrEmpty(model.RemoteUrl.AuthorityUrl))
+                {
+                    List<Task> loadTask = new();
+                    lock (AllChats)
+                    {
+                        var conn = FindChatForKey(model.ForUrl.UserName, model.ForUrl.AuthorityUrl, model.KeyChatRoom);
+                        _logger.LogTrace(@"{MyUser} Пришел новый Offer к комнате {NameRoom}, от {forUrl} {UserName}", model.ForUrl.UserName, conn?.NameRoom, model.RemoteUrl.AuthorityUrl, model.RemoteUrl.UserName);
+                        if (conn != null)
+                        {
+                            if (conn.IdUiConnect != null && _connections.AnyGuid(conn.IdUiConnect) && GetStateCalling(conn) >= StateCall.Connected)
+                            {
+                                var con = conn.Items.FirstOrDefault(x => model.RemoteUrl.UserName == x.UserName && IpAddressUtilities.CompareForAuthority(x.AuthorityUrl, model.RemoteUrl.AuthorityUrl));
+                                if (con != null && con.State == StateCall.Connected)
+                                {
+                                    con.State = StateCall.ChangeStream;
+                                    loadTask.Add(LoadAnswerForUrl(model.KeyChatRoom, model.ForUrl.AuthorityUrl, model.ForUrl.UserName, model.RemoteUrl.AuthorityUrl, model.RemoteUrl.UserName, StateCall.ChangeStream, 10, async (keyRoom, myUser, forUrl, forUser) => await ErrorConnectP2P(keyRoom, myUser, forUrl, forUser)));
+                                    loadTask.Add(Clients.Clients(_connections.GetContextIdForGuid(conn.IdUiConnect)).SetChangeRemoteOfferForUrl(model.RemoteUrl.AuthorityUrl, model.RemoteUrl.UserName, model.KeyChatRoom, model.Value));
+                                }
+                            }
+                            loadTask.Add(SendUpdateChatRoom(model.ForUrl.AuthorityUrl, model.ForUrl.UserName, conn));
+                        }
+                    }
+                    await Task.WhenAll(loadTask);
+                }
+            }
+            catch (Exception ex)
+            {
+                _logger.WriteLogError(ex, nameof(SetChangeRemoteStream));
+            }
+        }
+
 
         /// <summary>
         /// Локальный вызов, обмен candidate
@@ -1825,7 +1949,7 @@ namespace ServerLibrary.HubsProvider
 
                     if (con != null && con.State >= StateCall.Calling)
                     {
-                        await Clients.Clients(_connections.GetContextIdForGuid(conn.IdUiConnect)).SendCoreAsync("SendCandidate", new object?[] { model.RemoteUrl.AuthorityUrl, model.RemoteUrl.UserName, model.KeyChatRoom, model.Value });
+                        await Clients.Clients(_connections.GetContextIdForGuid(conn.IdUiConnect)).SendCandidate(model.RemoteUrl.AuthorityUrl, model.RemoteUrl.UserName, model.KeyChatRoom, model.Value);
                     }
                 }
             }
@@ -2226,7 +2350,7 @@ namespace ServerLibrary.HubsProvider
                     _logger.LogTrace(@"{MyName} закрываем P2P к комнате {NameRoom} для {forUrl}", myUser, conn?.NameRoom, forUrl);
                     if (!string.IsNullOrEmpty(forUrl) && conn != null && conn.IdUiConnect != null && _connections.AnyGuid(conn.IdUiConnect))
                     {
-                        await Clients.Clients(_connections.GetContextIdForGuid(conn.IdUiConnect)).SendCoreAsync("CloseP2P", new object[] { forUrl, forUser, keyChatRoom });
+                        await Clients.Clients(_connections.GetContextIdForGuid(conn.IdUiConnect)).CloseP2P(forUrl, forUser, keyChatRoom);
                     }
                 }
             }
@@ -2514,7 +2638,7 @@ namespace ServerLibrary.HubsProvider
                         var r = _connections.GetContextIdForLogin(IpAddressUtilities.GetAuthority(authorityUrl), userName);
                         if (r?.Count() > 0)
                         {
-                            await Clients.Clients(r).SendCoreAsync("AddMessageForChat", new object[] { keyChatRoom, message });
+                            await Clients.Clients(r).AddMessageForChat(keyChatRoom, message);
                         }
                     }
                 }
@@ -2595,7 +2719,7 @@ namespace ServerLibrary.HubsProvider
                 {
                     _logger.LogTrace("Отправка уведомления для {name}, сообщение {message}", pushMessage.ForUser, pushMessage.Message);
                     var payload = JsonSerializer.Serialize(pushMessage);
-                    await Clients.Clients(r).SendAsync(nameof(DaprMessage.Fire_ShowPushNotify), payload);
+                    await Clients.Clients(r).Fire_ShowPushNotify(payload);
                 }
 
             }
@@ -2693,93 +2817,6 @@ namespace ServerLibrary.HubsProvider
         }
 
         /// <summary>
-        /// Локальный вызов. Запускаем изменение Р2Р подключения
-        /// </summary>
-        /// <param name="forUrl"></param>
-        /// <param name="forUserName"></param>
-        /// <param name="keyChatRoom"></param>
-        /// <param name="newOffer"></param>
-        /// <param name="typeOutCall"></param>
-        /// <returns></returns>
-        public async Task SendChangeRemoteStream(string forUrl, string forUserName, Guid keyChatRoom, string newOffer, TypeConnect typeOutCall)
-        {
-            try
-            {
-                if (string.IsNullOrEmpty(_getMyKeyConnect?.AuthorityUrl) || string.IsNullOrEmpty(_getMyKeyConnect.UserName)) return;
-
-                List<Task> loadTask = new();
-
-                forUrl = IpAddressUtilities.GetAuthority(forUrl);
-                var conn = GetChatListForUser.FirstOrDefault(x => x.Key == keyChatRoom);
-                _logger.LogTrace(@"{MyUser} отправляем новый Offer к комнате {NameRoom}, для {forUrl} пользователь {UserName}", _getMyKeyConnect.UserName, conn?.NameRoom, forUrl, forUserName);
-                if (conn != null && GetStateCalling(conn) >= StateCall.Connected)
-                {
-                    conn.OutTypeConn = typeOutCall;
-                    var con = conn.Items.FirstOrDefault(x => x.UserName == forUserName && IpAddressUtilities.CompareForAuthority(x.AuthorityUrl, forUrl));
-
-                    if (con != null && con.State == StateCall.Connected)
-                    {
-                        con.State = StateCall.ChangeStream;
-                        loadTask.Add(LoadAnswerForUrl(keyChatRoom, _getMyKeyConnect.AuthorityUrl, _getMyKeyConnect.UserName, forUrl, forUserName, StateCall.ChangeStream, 10, async (keyRoom, myUser, forUrl, forUser) => await ErrorConnectP2P(keyRoom, myUser, forUrl, forUser)));
-
-                        var requestConnect = new KeyChatForUrlAndValue() { KeyChatRoom = keyChatRoom, RemoteUrl = _getMyKeyConnect, ForUrl = new(con.AuthorityUrl, con.UserName), Value = newOffer };
-
-                        loadTask.Add(SendLocalOrRemotaRequest(SetChangeRemoteStream, requestConnect, _getMyKeyConnect.AuthorityUrl, forUrl));
-
-                        loadTask.Add(SendUpdateChatRoom(_getMyKeyConnect.AuthorityUrl, _getMyKeyConnect.UserName, conn));
-                    }
-                }
-
-                await Task.WhenAll(loadTask);
-            }
-            catch (Exception ex)
-            {
-                _logger.WriteLogError(ex, nameof(SendChangeRemoteStream));
-            }
-        }
-
-        /// <summary>
-        /// Удаленный вызов. Приходит уведомление о изменении Р2Р подключения
-        /// </summary>
-        /// <param name="model"></param>
-        /// <returns></returns>
-        public async Task SetChangeRemoteStream(KeyChatForUrlAndValue model)
-        {
-            try
-            {
-                if (!string.IsNullOrEmpty(model.ForUrl?.UserName) && !string.IsNullOrEmpty(model.RemoteUrl?.UserName))
-                {
-                    List<Task> loadTask = new();
-                    lock (AllChats)
-                    {
-                        var conn = FindChatForKey(model.ForUrl.UserName, model.ForUrl.AuthorityUrl, model.KeyChatRoom);
-                        _logger.LogTrace(@"{MyUser} Пришел новый Offer к комнате {NameRoom}, от {forUrl} {UserName}", model.ForUrl.UserName, conn?.NameRoom, model.RemoteUrl.AuthorityUrl, model.RemoteUrl.UserName);
-                        if (conn != null)
-                        {
-                            if (conn.IdUiConnect != null && _connections.AnyGuid(conn.IdUiConnect) && GetStateCalling(conn) >= StateCall.Connected)
-                            {
-                                var con = conn.Items.FirstOrDefault(x => model.RemoteUrl.UserName == x.UserName && IpAddressUtilities.CompareForAuthority(x.AuthorityUrl, model.RemoteUrl.AuthorityUrl));
-                                if (con != null && con.State == StateCall.Connected)
-                                {
-                                    con.State = StateCall.ChangeStream;
-                                    loadTask.Add(LoadAnswerForUrl(model.KeyChatRoom, model.ForUrl.AuthorityUrl, model.ForUrl.UserName, model.RemoteUrl.AuthorityUrl, model.RemoteUrl.UserName, StateCall.ChangeStream, 10, async (keyRoom, myUser, forUrl, forUser) => await ErrorConnectP2P(keyRoom, myUser, forUrl, forUser)));
-                                    loadTask.Add(Clients.Clients(_connections.GetContextIdForGuid(conn.IdUiConnect)).SendCoreAsync("SetChangeRemoteOfferForUrl", new object?[] { model.RemoteUrl.AuthorityUrl, model.RemoteUrl.UserName, model.KeyChatRoom, model.Value }));
-
-                                }
-                            }
-                            loadTask.Add(SendUpdateChatRoom(model.ForUrl.AuthorityUrl, model.ForUrl.UserName, conn));
-                        }
-                    }
-                    await Task.WhenAll(loadTask);
-                }
-            }
-            catch (Exception ex)
-            {
-                _logger.WriteLogError(ex, nameof(SetChangeRemoteStream));
-            }
-        }
-
-        /// <summary>
         /// Получаем список подключенных пользователей
         /// </summary>
         /// <returns></returns>
@@ -2787,7 +2824,6 @@ namespace ServerLibrary.HubsProvider
         {
             return _connections.GetAllConnectedUser();
         }
-
 
         public async Task WriteLocalContact()
         {
@@ -2835,8 +2871,7 @@ namespace ServerLibrary.HubsProvider
                                 }
                             }
                         }
-
-                        await Clients.All.SendCoreAsync("AddOrUpdateContactList", new[] { addData });
+                        await Clients.All.AddOrUpdateContactList(addData);
                     }
                 }
             }
@@ -2885,7 +2920,7 @@ namespace ServerLibrary.HubsProvider
                             {
                                 await RemoveConnectInfoForAllChat(deletedItems);
                             }
-                            await Clients.All.SendCoreAsync("AddOrUpdateContactList", new[] { addData });
+                            await Clients.Others.AddOrUpdateContactList(addData);
                         }
                     }
                 }
@@ -2913,7 +2948,6 @@ namespace ServerLibrary.HubsProvider
             }
         }
 
-
         async Task RemoveConnectInfoForAllChat(IEnumerable<PodsProto.V1.ContactInfo>? deletedItems)
         {
             try
@@ -2934,7 +2968,7 @@ namespace ServerLibrary.HubsProvider
                                     {
                                         if (!string.IsNullOrEmpty(first.AuthorityUrl) && !string.IsNullOrEmpty(first.UserName) && chat.IdUiConnect != null && _connections.AnyGuid(chat.IdUiConnect))
                                         {
-                                            loadTask.Add(Clients.Clients(_connections.GetContextIdForGuid(chat.IdUiConnect)).SendCoreAsync("CloseP2P", new object[] { first.AuthorityUrl, first.UserName, chat.Key }));
+                                            loadTask.Add(Clients.Clients(_connections.GetContextIdForGuid(chat.IdUiConnect)).CloseP2P(first.AuthorityUrl, first.UserName, chat.Key));
                                         }
                                     }
                                     chat.Items.Remove(first);
@@ -2980,7 +3014,7 @@ namespace ServerLibrary.HubsProvider
                     });
                     if (b?.Value == true)
                     {
-                        await Clients.Clients(_connections.GetContextIdForLogin(_getMyKeyConnect.AuthorityUrl, _getMyKeyConnect.UserName)).SendCoreAsync("AddOrUpdateContact", [newCu]);
+                        await Clients.Clients(_connections.GetContextIdForLogin(_getMyKeyConnect.AuthorityUrl, _getMyKeyConnect.UserName)).AddOrUpdateContact(newCu);
                     }
                 }
                 catch (Exception ex)
@@ -2996,6 +3030,7 @@ namespace ServerLibrary.HubsProvider
             {
                 try
                 {
+                    var r = _connections.GetContextIdForLogin(_getMyKeyConnect.AuthorityUrl, _getMyKeyConnect.UserName);
                     var b = await _pods.RemoveNoReadMessagesAsync(new()
                     {
                         UserKey = new()
@@ -3007,9 +3042,10 @@ namespace ServerLibrary.HubsProvider
                     });
                     if (b?.Value == true)
                     {
-                        var r = _connections.GetContextIdForLogin(_getMyKeyConnect.AuthorityUrl, _getMyKeyConnect.UserName);
                         if (r?.Count() > 0)
-                            await Clients.Clients(r).SendCoreAsync("RemoveNoReadMessage", [keyChatRoom]);
+                        {
+                            await Clients.Clients(r).RemoveNoReadMessage(keyChatRoom);
+                        }
                     }
                 }
                 catch (Exception ex)
@@ -3019,36 +3055,6 @@ namespace ServerLibrary.HubsProvider
             }
         }
 
-        /// <summary>
-        /// Обнавляем статуса пользователя
-        /// </summary>
-        /// <param name="authorityUrl"></param>
-        /// <param name="userName"></param>
-        /// <param name="lastActive"></param>
-        /// <returns></returns>
-        public async Task UpdateStateActiveLocalContact(string? authorityUrl, string? userName, DateTime? lastActive)
-        {
-            if (!string.IsNullOrEmpty(authorityUrl) && !string.IsNullOrEmpty(userName))
-            {
-                try
-                {
-                    var b = await _pods.UpdateLastActiveContactAsync(new PodsProto.V1.ContactInfo()
-                    {
-                        AuthorityUrl = authorityUrl,
-                        UserName = userName,
-                        LastActive = lastActive?.ToTimestamp()
-                    });
-                    if (b?.Value == true)
-                    {
-                        await Clients.All.SendCoreAsync("UpdateListActiveContact", [authorityUrl, userName, lastActive]);
-                    }
-                }
-                catch (Exception ex)
-                {
-                    _logger.WriteLogError(ex, nameof(UpdateStateActiveLocalContact));
-                }
-            }
-        }
 
         /// <summary>
         /// Удаляем пользователя пу
@@ -3077,7 +3083,7 @@ namespace ServerLibrary.HubsProvider
                     });
                     if (b?.Value == true)
                     {
-                        await Clients.Clients(_connections.GetContextIdForLogin(_getMyKeyConnect.AuthorityUrl, _getMyKeyConnect.UserName)).SendCoreAsync("DeleteContactNotify", [authorityUrl, userName]);
+                        await Clients.Clients(_connections.GetContextIdForLogin(_getMyKeyConnect.AuthorityUrl, _getMyKeyConnect.UserName)).DeleteContactNotify(authorityUrl, userName);
                         return true;
                     }
                 }

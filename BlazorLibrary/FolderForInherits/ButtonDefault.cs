@@ -1,7 +1,4 @@
-﻿using BlazorLibrary.Shared;
-using Google.Protobuf.WellKnownTypes;
-using Microsoft.AspNetCore.Components;
-using Microsoft.AspNetCore.Components.Rendering;
+﻿using Microsoft.AspNetCore.Components;
 
 namespace BlazorLibrary.FolderForInherits
 {
@@ -26,7 +23,7 @@ namespace BlazorLibrary.FolderForInherits
         public string? HotKey { get; set; }
 
         [Parameter]
-        public bool? TextWrap { get; set; } = false;
+        public bool IsDisabled { get; set; } = false;
 
         [Parameter]
         public bool? IsOutline { get; set; } = false;
@@ -65,19 +62,27 @@ namespace BlazorLibrary.FolderForInherits
             }
         }
 
-        public async Task OnClickAction()
+        protected async Task OnClickAction()
         {
-            IsProcessing = true;
             try
             {
-                if (OnClick.HasDelegate)
+                if (OnClick.HasDelegate && !IsDisabled && !IsProcessing)
+                {
+                    IsProcessing = true;
                     await OnClick.InvokeAsync();
+                }
             }
             catch (Exception ex)
             {
                 Console.WriteLine(ex.Message);
-            }           
+            }
             IsProcessing = false;
         }
+
+        protected string? GetDisabledd => ((IsProcessing || IsDisabled) ? "disabled" : null);
+
+        protected string? GetHotKey => (!string.IsNullOrEmpty(HotKey) ? HotKey : null);
+
+        protected string? GetClass(string color) => $"btn btn{(IsOutline == true ? "-outline" : "")}-{color} {AddClass}";
     }
 }

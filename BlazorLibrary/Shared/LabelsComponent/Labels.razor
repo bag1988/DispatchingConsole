@@ -1,12 +1,19 @@
-﻿<h5 class="pointer" @onclick="()=>IsViewSpecification=!IsViewSpecification"><span class="oi oi-@(IsViewSpecification?"minus":"plus")"></span> @DeviceRep["SPECIFICATIONS"]</h5>
+﻿@using Label.V1
+<h5 class="pointer" @onclick="()=>IsViewSpecification=!IsViewSpecification"><span class="oi oi-@(IsViewSpecification?"minus":"plus")"></span> @DeviceRep["SPECIFICATIONS"]</h5>
 
 @if (!IsPageLoad)
 {
     <div class="@(IsViewSpecification?"d-block":"d-none")">
-        <TableVirtualize @ref="table" TItem="TableItem" Provider="GetProvider" IsSetFocus="false" SelectList="(new(){SelectItem??new()})" SetSelectList="SetSelectItem" IsSticky="false">
+
+
+        <TableDefault IsSetFocus="false" TItem="Field" Colspan="5" Items="GetProvider" SetSelectList="SetSelectItem" SelectList="(new(){SelectItem??new()})" IsSticky="false" MinWidth="0">
+            <Thead>
+            <th>@DeviceRep["SPECIFICATION"]</th>
+            <th>@AsoRep["Value"]</th>
+            </Thead>
             <Tbody Context="item">
             <td>
-                    @if (item.Type == TypeField.Input && item.IdField == 0 && string.IsNullOrEmpty(item.NameField))
+                    @if (item.IdNameField == 0 && string.IsNullOrEmpty(item.NameField))
                     {
                     <div>
                         <input type="text" list="FreeKey" class="form-control form-control-sm" value="@item.NameField" @onchange="SetNameField">
@@ -29,42 +36,32 @@
             <td>
                     @if (SelectItem?.Equals(item) ?? false)
                     {
-                        @if (item.Type == TypeField.Input)
-                        {
-                        <div>
-                            <input list="ValueList" type="text" class="form-control form-control-sm" value="@item.NameValue" @onchange="SetValueField" >
-                                @if (GetHelpValueList != null)
-                                {
-                                <datalist id="ValueList">
-                                        @foreach (var item in GetHelpValueList)
-                                        {
-                                        <option value="@item" />
-                                        }
-                                </datalist>
-                                }
-                        </div>
-                        }
+                    <div>
+                        <input list="ValueList" type="text" class="form-control form-control-sm" value="@item.ValueField" @onchange="SetValueField">
+                            @if (GetHelpValueList != null)
+                            {
+                            <datalist id="ValueList">
+                                    @foreach (var item in GetHelpValueList)
+                                    {
+                                    <option value="@item" />
+                                    }
+                            </datalist>
+                            }
+                    </div>
                     }
                     else
                     {
-                        @if (item.Type == TypeField.Input)
-                        {
-                            @item.NameValue
-                        }                        
+                        @item.ValueField
                     }
 
             </td>
             </Tbody>
             <TSticky>
-                <CheckP BitPos="NameBitsPos.Create">
+                <CheckP BitPosList="[NameBitsPos.CreateAbon, NameBitsPos.CreateNoStandart]" SystemID="@SubsystemType.SUBSYST_ASO">
                     @*Добавить*@
                     <BDark Text="@UUZSRep["IDS_STRING_ADD"]" OnClick="AddSpicification" />
-                    @*@if (SelectItem != null)
-                {
-                <BDelete OnClick="@RemoveItem" />
-                }*@
                 </CheckP>
             </TSticky>
-        </TableVirtualize>
+        </TableDefault>
     </div>
 }

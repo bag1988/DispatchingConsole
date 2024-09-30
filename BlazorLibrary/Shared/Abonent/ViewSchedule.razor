@@ -16,31 +16,21 @@
     <td>@item.Endtime.ToTimeSpan()</td>
     </Tbody>
     <TSticky>
-        <CheckP BitPosList="@(new[]{NameBitsPos.Create, NameBitsPos.CreateNoStandart})">
-            <BCreate OnClick="()=>ViewModal(true)" />
-            @if (selectItem != null)
-            {
-                <BEdit OnClick="()=>ViewModal()" />
-                <BDelete OnClick="()=>IsDeleteShedule=true" />
-                @if (SheduleList?.IndexOf(selectItem) > 0)
-                {
-                    <BSecondary OnClick="()=>SetPriorityShedule(-1)">
-                        <span class="oi oi-arrow-thick-top me-0"></span>
-                    </BSecondary>
-                }
-                @if (SheduleList?.IndexOf(selectItem) < (SheduleList?.Count - 1))
-                {
-                    <BSecondary OnClick="()=>SetPriorityShedule(1)">
-                        <span class="oi oi-arrow-thick-bottom me-0"></span>
-                    </BSecondary>
-                }
-
-            }
+        <CheckP BitPosList="@(new[]{NameBitsPos.CreateAbon, NameBitsPos.CreateNoStandart})" SystemID="@SubsystemType.SUBSYST_ASO">
+            <BCreate OnClick="()=>ViewModal(true)" />            
+            <BEdit OnClick="()=>ViewModal()" IsDisabled="@(selectItem == null)" />
+            <BDelete OnClick="()=>IsDeleteShedule=true" IsDisabled="@(selectItem == null)" />
+            <BSecondary OnClick="()=>SetPriorityShedule(-1)" IsDisabled="@(selectItem == null || SheduleList==null || SheduleList.IndexOf(selectItem) < 1)">
+                <span class="oi oi-arrow-thick-top me-0"></span>
+            </BSecondary>
+            <BSecondary OnClick="()=>SetPriorityShedule(1)" IsDisabled="@(selectItem == null || SheduleList==null || SheduleList.IndexOf(selectItem) >= (SheduleList.Count - 1))">
+                <span class="oi oi-arrow-thick-bottom me-0"></span>
+            </BSecondary>
         </CheckP>
     </TSticky>
 </TableDefault>
 
-<CheckP BitPosList="@(new[]{NameBitsPos.Create, NameBitsPos.CreateNoStandart})">
+<CheckP BitPosList="@(new[]{NameBitsPos.CreateAbon, NameBitsPos.CreateNoStandart})" SystemID="@SubsystemType.SUBSYST_ASO">
     @if (IsDeleteShedule && selectItem != null)
     {
         <ModalDialog Title="@GSOFormRep["IDS_REG_SHEDULE_DELETE"]" ButtonCloseEvent="@(()=>{IsDeleteShedule=false; selectItem=null;})">

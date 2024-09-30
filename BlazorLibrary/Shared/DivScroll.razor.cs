@@ -1,10 +1,8 @@
 ﻿using BlazorLibrary.Models;
-using BlazorLibrary.Shared.Audio;
 using Microsoft.AspNetCore.Components;
 using Microsoft.Extensions.Logging;
 using Microsoft.JSInterop;
 using SensorM.GsoCore.SharedLibrary;
-using SharedLibrary.Utilities;
 
 namespace BlazorLibrary.Shared
 {
@@ -19,15 +17,10 @@ namespace BlazorLibrary.Shared
         [Parameter]
         public double? Devision { get; set; } = 1; //разделить на
 
-        [Parameter]
-        public bool IsMaxHeigth { get; set; } = true;
-
-        [Parameter]
-        public bool? IsSticky { get; set; } = true;
-
         private ElementReference div = default!;
 
-        private string? MaxHeigth = "calc((100vh - 92px)/2)";
+        private string? MaxHeight = "auto";
+        private string? MinHeight = "auto";
 
         IJSObjectReference? _jsModuleMutationObserver;
 
@@ -35,6 +28,7 @@ namespace BlazorLibrary.Shared
 
         DotNetObjectReference<DivScroll>? _jsThis;
 
+        BoundingClientRect OldDivRect = new();
         protected override async Task OnInitializedAsync()
         {
             try
@@ -47,10 +41,6 @@ namespace BlazorLibrary.Shared
                 await Task.Yield();
 
                 await _observerDiv.InvokeVoidAsync("start", div);
-
-                //var d = await JSRuntime.InvokeAsync<BoundingClientRect?>("GetBoundingClientRect", div);
-                //await CalcHeight(d);
-
             }
             catch (Exception ex)
             {
@@ -58,24 +48,38 @@ namespace BlazorLibrary.Shared
             }
         }
 
-        Task CalcHeight(BoundingClientRect? divRect)
+        Task CalcHeight(BoundingClientRect? divRect, int scrollHeight)
         {
             try
             {
                 var calc = "";
                 if (divRect != null)
                 {
-                    calc = $"100vh - {divRect.top + 10}px";
-
-                    if (Devision != null && Devision > 1)
+                    if (OldDivRect.top != divRect.top)
                     {
-                        calc = $"({calc})/{Devision}";
+                        calc = $"100vh - {divRect.top + 10}px";
+
+                        if (Devision != null && Devision > 1)
+                        {
+                            calc = $"({calc})/{Devision}";
+                        }
+                        MaxHeight = $"calc({calc.ToString().Replace(",", ".")})";
                     }
 
-                    MaxHeigth = $"calc({calc.ToString().Replace(",", ".")})";
+                    if (divRect.height <= 400 && scrollHeight > 400)
+                    {
+                        MinHeight = "400px";
+                    }
+                    else if (scrollHeight < 400)
+                    {
+                        MinHeight = $"{scrollHeight}px";
+                    }
+                    else
+                    {
+                        MinHeight = "auto";
+                    }
+                    OldDivRect = divRect;
                 }
-                else
-                    MaxHeigth = "calc(100vh - 92px)";
             }
             catch (Exception ex)
             {
@@ -85,11 +89,11 @@ namespace BlazorLibrary.Shared
         }
 
         [JSInvokable]
-        public async Task RecalculateDiv(BoundingClientRect? divRect)
+        public async Task RecalculateDiv(BoundingClientRect? divRect, int? scrollHeight = 0)
         {
             try
             {
-                await CalcHeight(divRect);
+                await CalcHeight(divRect, scrollHeight ?? 0);
                 StateHasChanged();
             }
             catch (Exception ex)

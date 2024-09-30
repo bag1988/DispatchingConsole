@@ -1,11 +1,4 @@
-﻿using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
-using BlazorLibrary.Shared;
-using SharedLibrary.Extensions;
-using SMDataServiceProto.V1;
+﻿using SMDataServiceProto.V1;
 
 namespace BlazorLibrary.Models
 {
@@ -34,7 +27,6 @@ namespace BlazorLibrary.Models
             IsScrollData = true;
         }
 
-
         public async Task AddData()
         {
             if (IsData && IsScrollData && !IsLoadData)
@@ -47,8 +39,6 @@ namespace BlazorLibrary.Models
                 IsLoadData = false;
             }
         }
-
-
 
         private bool IsScrollData = true;
 

@@ -1,6 +1,5 @@
 ﻿using System.Net.Http.Json;
 using Microsoft.AspNetCore.Components.WebAssembly.Hosting;
-using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 
@@ -13,12 +12,14 @@ namespace BlazorLibrary.ServiceColection
             try
             {
                 var client = new HttpClient() { BaseAddress = new Uri(builder.HostEnvironment.BaseAddress) };
-                using var response = await client.PostAsync("api/v1/allow/GetLoggingSetting", null);
+                using var result = await client.PostAsync("api/v1/allow/GetLoggingSetting", null);
                 Dictionary<string, string> keyValuePairs = new();
-                if (response.IsSuccessStatusCode)
+                if (result.IsSuccessStatusCode)
                 {
-                    keyValuePairs = await response.Content.ReadFromJsonAsync<Dictionary<string, string>?>() ?? new();
+                    keyValuePairs = await result.Content.ReadFromJsonAsync<Dictionary<string, string>?>() ?? new();      
                 }
+                
+                builder.Services.AddSingleton(typeof(ILogger<>), typeof(LoggerInterceptor<>));
                 builder.Services.AddLogging(logging =>
                 {
                     if (keyValuePairs.ContainsKey("Default") && Enum.TryParse<LogLevel>(keyValuePairs["Default"], out var minimumLevel))
@@ -42,8 +43,6 @@ namespace BlazorLibrary.ServiceColection
             {
                 Console.WriteLine(ex.Message);
             }
-
         }
-
     }
 }

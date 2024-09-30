@@ -30,7 +30,7 @@ namespace BlazorLibrary.Shared.Audio
 
         private ElementReference player;
 
-        private SndSetting SettingSound = new();
+        private Models.SndSetting SettingSound = new();
 
         string? _AppId = null;
 

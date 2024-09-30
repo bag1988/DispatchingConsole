@@ -1,26 +1,16 @@
-using System.IO;
-using System.Net.Http;
-using System.Text;
-using System.Text.Json;
+﻿using System.Text;
 using System.Text.RegularExpressions;
 using Asp.Versioning;
-using BlazorLibrary.GlobalEnums;
-using Google.Api;
+using BlazorLibrary.Helpers;
 using Microsoft.AspNetCore.Authorization;
-using Microsoft.AspNetCore.Components.Forms;
-using Microsoft.AspNetCore.Http.Extensions;
 using Microsoft.AspNetCore.Mvc;
-using Microsoft.AspNetCore.SignalR;
 using Microsoft.AspNetCore.SignalR.Client;
-using Microsoft.AspNetCore.WebUtilities;
-using Microsoft.IdentityModel.Tokens;
+using SensorM.GsoCommon.ServerLibrary.Models;
+using SensorM.GsoCore.RemoteConnectLibrary;
+using SensorM.GsoCore.SharedLibrary.Interfaces;
 using ServerLibrary.Extensions;
-using ServerLibrary.HubsProvider;
 using SharedLibrary.Models;
 using SharedLibrary.Utilities;
-using Xabe.FFmpeg;
-using static System.Collections.Specialized.BitVector32;
-using static Google.Rpc.Context.AttributeContext.Types;
 
 namespace DispatchingConsole.Server.Controllers
 {
@@ -28,56 +18,107 @@ namespace DispatchingConsole.Server.Controllers
     [ApiVersion("1.0")]
     [Route("api/v{version:apiVersion}/chat/[action]")]
     [AllowAnonymous]
-    public class CommunicationController : ControllerBase, IDisposable
+    public class CommunicationController : ControllerBase, IChatHub
     {
         private readonly ILogger<CommunicationController> _logger;
-        readonly HubConnection? _hubConnection;
+        static HubConnection? _hubConnection;
+
+        readonly RemoteHttpProvider _httpClient;
+
         readonly string DirectoryTmp;
 
-        readonly int _AppHttpsPort = 2291;
-
-        public CommunicationController(ILogger<CommunicationController> logger, IConfiguration conf)
+        public CommunicationController(ILogger<CommunicationController> logger, IConfiguration conf, RemoteHttpProvider httpClient)
         {
             _logger = logger;
-
-            var url = conf.GetValue<string?>("Kestrel:Endpoints:Http:Url")?.Split(":").LastOrDefault();
-
-            if (!string.IsNullOrEmpty(url) && int.TryParse(url, out var port))
+            try
             {
-                _hubConnection = new HubConnectionBuilder().WithUrl(new Uri($"http://127.0.0.1:{port}/CommunicationChatHub")).Build();
+                if (_hubConnection == null)
+                {
+                    var url = conf.GetValue<string?>("Kestrel:Endpoints:Http:Url")?.Split(":").LastOrDefault() ?? "8080";
+                    if (!string.IsNullOrEmpty(url) && int.TryParse(url, out var port))
+                    {
+                        _hubConnection = new HubConnectionBuilder().WithUrl(new Uri($"http://127.0.0.1:{port}/CommunicationChatHub")).Build();
+                        _hubConnection.SubscribeViaInterface(this, typeof(IChatHub));
+                    }
+                }
+                DirectoryTmp = conf.GetValue<string?>("PodsArhivePath") ?? "PodsArhivePath";
             }
-            DirectoryTmp = conf.GetValue<string?>("PodsArhivePath") ?? "PodsArhivePath";
-            _AppHttpsPort = conf.GetValue<int?>("DISPATCHINGCONSOLE_APP_HTTPS_PORT") ?? _AppHttpsPort;
+            catch (Exception ex)
+            {
+                DirectoryTmp = "PodsArhivePath";
+                _logger.LogError("Ошибка инитиализации {error}", ex.Message);
+            }
+            _httpClient = httpClient;
         }
 
         async Task SendHubConnect<TData>(string method, TData model)
         {
-            if (_hubConnection != null)
-            {
-                if (_hubConnection.State != HubConnectionState.Connected)
-                {
-                    await _hubConnection.StartAsync();
-                }
-                await _hubConnection.SendAsync(method, model);
-            }
+            await SendHubConnect(method, [model]);
         }
-        async Task SendHubConnect(string method, object[] args)
+        async Task SendHubConnect(string method, object?[] args)
         {
-            if (_hubConnection != null)
+            try
             {
-                if (_hubConnection.State != HubConnectionState.Connected)
+                _logger.LogTrace("Удаленный вызов от: {remote} к методу: {method}", HttpContext.Connection.RemoteIpAddress?.MapToIPv4().ToString() ?? "нет ip адреса", method);
+                if (_hubConnection != null)
                 {
-                    await _hubConnection.StartAsync();
+                    if (_hubConnection.State == HubConnectionState.Disconnected)
+                    {
+                        await _hubConnection.StartAsync();
+                    }
+                    _logger.LogTrace("Вызов метода: {method}, состояние подключения к хабу: {state}", method, _hubConnection.State);
+                    if (_hubConnection.State == HubConnectionState.Connected)
+                    {
+                        await _hubConnection.SendCoreAsync(method, args);
+                    }
+                    else
+                    {
+                        _logger.LogTrace("Ошибка пересылки данных в hub, состояние подключения {state}", _hubConnection.State);
+                    }
                 }
-                await _hubConnection.SendCoreAsync(method, args);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError("Удаленный вызов от: {remote} к методу: {method} завершился ошибкой: {error}", HttpContext.Connection.RemoteIpAddress?.MapToIPv4().ToString() ?? "нет ip адреса", method, ex.Message);
             }
         }
+
+        async Task<TResult?> InvokeHubConnect<TResult>(string method, object?[] args)
+        {
+            try
+            {
+                _logger.LogTrace("Удаленный вызов от: {remote} к методу: {method}", HttpContext.Connection.RemoteIpAddress?.MapToIPv4().ToString() ?? "нет ip адреса", method);
+                if (_hubConnection != null)
+                {
+                    if (_hubConnection.State == HubConnectionState.Disconnected)
+                    {
+                        await _hubConnection.StartAsync();
+                    }
+                    _logger.LogTrace("Вызов метода: {method}, состояние подключения к хабу: {state}", method, _hubConnection.State);
+                    if (_hubConnection.State == HubConnectionState.Connected)
+                    {
+                        return await _hubConnection.InvokeCoreAsync<TResult>(method, args);
+                    }
+                    else
+                    {
+                        _logger.LogTrace("Ошибка пересылки данных в hub, состояние подключения {state}", _hubConnection.State);
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError("Удаленный вызов от: {remote} к методу: {method} завершился ошибкой: {error}", HttpContext.Connection.RemoteIpAddress?.MapToIPv4().ToString() ?? "нет ip адреса", method, ex.Message);
+            }
+            return default;
+        }
+
 
         [HttpGet]
         public FileResult? GetVideoServer([FromQuery] string fileName)
         {
             try
             {
+                _logger.LogTrace("Удаленный вызов от: {remote} к методу: {method}", HttpContext.Connection.RemoteIpAddress?.MapToIPv4().ToString() ?? "нет ip адреса", nameof(GetVideoServer));
                 fileName = Path.Combine(DirectoryTmp, fileName);
 
                 if (System.IO.File.Exists(fileName))
@@ -99,6 +140,7 @@ namespace DispatchingConsole.Server.Controllers
         {
             try
             {
+                _logger.LogTrace("Удаленный вызов от: {remote} к методу: {method}", HttpContext.Connection.RemoteIpAddress?.MapToIPv4().ToString() ?? "нет ip адреса", nameof(GetAudioServer));
                 fileName = Path.Combine(DirectoryTmp, fileName);
                 if (System.IO.File.Exists(fileName))
                 {
@@ -118,6 +160,7 @@ namespace DispatchingConsole.Server.Controllers
         {
             try
             {
+                _logger.LogTrace("Удаленный вызов от: {remote} к методу: {method}", HttpContext.Connection.RemoteIpAddress?.MapToIPv4().ToString() ?? "нет ip адреса", nameof(GetFileServer));
                 fileName = Path.Combine(DirectoryTmp, fileName);
                 if (System.IO.File.Exists(fileName))
                 {
@@ -137,6 +180,7 @@ namespace DispatchingConsole.Server.Controllers
         {
             try
             {
+                _logger.LogTrace("Удаленный вызов от: {remote} к методу: {method}", HttpContext.Connection.RemoteIpAddress?.MapToIPv4().ToString() ?? "нет ip адреса", nameof(DownLoadFile));
                 fileName = Path.Combine(DirectoryTmp, fileName);
 
                 if (System.IO.File.Exists(fileName))
@@ -157,7 +201,8 @@ namespace DispatchingConsole.Server.Controllers
         {
             try
             {
-                if (!string.IsNullOrEmpty(request.FileUrl) && request.UserNames?.Length > 0 && request.KeyChatRoom != null && !string.IsNullOrEmpty(request.Message) && !string.IsNullOrEmpty(request.RemoteUrl.UserName))
+                _logger.LogTrace("Удаленный вызов от: {remote} к методу: {method}", HttpContext.Connection.RemoteIpAddress?.MapToIPv4().ToString() ?? "нет ip адреса", nameof(ReplicateFiles));
+                if (!string.IsNullOrEmpty(request.FileUrl) && request.UserNames?.Length > 0 && request.KeyChatRoom != null && !string.IsNullOrEmpty(request.Message) && !string.IsNullOrEmpty(request.RemoteUrl?.UserName))
                 {
 
                     var authorityUrl = IpAddressUtilities.GetAuthority(request.RemoteUrl.AuthorityUrl);
@@ -167,18 +212,9 @@ namespace DispatchingConsole.Server.Controllers
                         Stream? fileStream = null;
 
                         var absoluteUri = $"https://{authorityUrl}";
-
-                        var handler = new SocketsHttpHandler
-                        {
-                            SslOptions = new() { RemoteCertificateValidationCallback = delegate { return true; } },
-                            PooledConnectionLifetime = Timeout.InfiniteTimeSpan
-                        };
-
-                        using var httpClient = new HttpClient(handler);
-                        httpClient.BaseAddress = new Uri(absoluteUri);
                         try
                         {
-                            var result = await httpClient.GetAsync($"api/v1/chat/DownLoadFile?fileName={request.FileUrl}");
+                            using var result = await _httpClient.GetAsync(absoluteUri, "api/v1/chat/DownLoadFile", $"fileName={request.FileUrl}");
                             if (result.IsSuccessStatusCode)
                             {
                                 fileStream = await result.Content.ReadAsStreamAsync();
@@ -206,17 +242,16 @@ namespace DispatchingConsole.Server.Controllers
                                         }
                                         if (!System.IO.File.Exists(writePath))
                                         {
-                                            using (var fs = new FileStream(writePath, FileMode.Create, FileAccess.Write, FileShare.Read))
+                                            using (var fs = new FileStream(writePath, FileMode.Create, FileAccess.Write, FileShare.Read, 1_000_000))
                                             {
                                                 var readCount = 0;
-                                                byte[] buffer = new byte[1024 * 10];
+                                                byte[] buffer = new byte[1_000_000];
                                                 while ((readCount = await fileStream.ReadAsync(buffer)) > 0)
                                                 {
                                                     await fs.WriteAsync(buffer.Take(readCount).ToArray());
                                                 }
                                             }
                                             await fileStream.DisposeAsync();
-                                            httpClient.Dispose();
                                             message.Url = filePath;
                                             await SendHubConnect("AddMessageForUser", [IpAddressUtilities.GetAuthority(Request.Host.Value), firstUser, request.KeyChatRoom, message]);
                                         }
@@ -233,7 +268,6 @@ namespace DispatchingConsole.Server.Controllers
                         {
                             _logger.WriteLogError(ex, $"{Request.RouteValues["action"]?.ToString()} for {absoluteUri}");
                         }
-                        httpClient.Dispose();
                     }
                 }
                 return Ok();
@@ -250,16 +284,8 @@ namespace DispatchingConsole.Server.Controllers
         {
             try
             {
-                if (_hubConnection != null)
-                {
-                    if (_hubConnection.State != HubConnectionState.Connected)
-                    {
-                        await _hubConnection.StartAsync();
-                    }
-                    var response = await _hubConnection.InvokeAsync<IEnumerable<ContactInfo>?>("GetLocalContact");
-                    return Ok(response);
-                }
-                return Ok();
+                var response = await InvokeHubConnect<IEnumerable<ContactInfo>?>("GetLocalContact", Array.Empty<object>());
+                return Ok(response);
             }
             catch (Exception ex)
             {
@@ -466,15 +492,6 @@ namespace DispatchingConsole.Server.Controllers
             {
                 _logger.WriteLogError(ex, Request.RouteValues["action"]?.ToString());
                 return ex.GetResultStatusCode();
-            }
-        }
-
-        public void Dispose()
-        {
-            if (_hubConnection != null)
-            {
-                _hubConnection.StopAsync().Wait();
-                _hubConnection.DisposeAsync();
             }
         }
     }

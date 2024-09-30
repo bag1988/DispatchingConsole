@@ -55,7 +55,7 @@
                                     <select class="form-select" @bind="SheduleID">
                                         @foreach (var item in SheduleList)
                                         {
-                                            <option value="@item.SheduleID">@string.Format("{0:#,##0} ч. {1:mm} мин.", Math.Truncate(item.Duration.ToTimeSpan().TotalHours), item.Duration.ToTimeSpan())</option>
+                                            <option value="@item.SheduleID">@GsoRep[nameof(GsoLocalizationKey.TOTAL_HOUR_MINUTE_FOR_TIMESPAN), Math.Truncate(item.Duration.ToTimeSpan().TotalHours), item.Duration.ToTimeSpan()]</option>
                                         }
                                     </select>
 
@@ -190,12 +190,8 @@
                                     }
                                 </ChildButton>
                             </DropdownMenu>
-
-                            @if (SelectShedule != null)
-                            {
-                                @*Удалить линию*@
-                                <BDelete OnClick="()=>IsDeleteLine=true" />
-                            }
+                            @*Удалить линию*@
+                            <BDelete OnClick="()=>IsDeleteLine=true" IsDisabled="@(SelectShedule==null)" />
                         </TSticky>
                     </TableDefault>
                 </div>
@@ -246,7 +242,7 @@
                 <PLoad />
             }
             <ButtonModal>
-                <CheckP BitPosList="@(new[]{NameBitsPos.Create, NameBitsPos.CreateNoStandart})">
+                <CheckP BitPosList="@(new[]{NameBitsPos.CreateAbon, NameBitsPos.CreateNoStandart})" SystemID="@SubsystemType.SUBSYST_SZS">
                     <BSumbit IsProcessing="context" />
                 </CheckP>
                 <BCancel OnClick="CallEvent" />

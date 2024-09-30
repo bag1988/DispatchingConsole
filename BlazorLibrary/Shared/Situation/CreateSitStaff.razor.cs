@@ -31,7 +31,6 @@ namespace BlazorLibrary.Shared.Situation
         public bool IsReadOnly { get; set; } = false;
 
         int SelectSubsystemId = 0;
-        //private string TitleName { get; set; } = "";
 
         private SituationInfo NewSit = new() { SysSet = 1, Status = 1, SitTypeID = 1, SitPriority = 1 };
         private SituationInfo OldSit = new() { SysSet = 1, Status = 1, SitTypeID = 1, SitPriority = 1 };
@@ -50,7 +49,6 @@ namespace BlazorLibrary.Shared.Situation
 
         private List<CUListsItem>? CULists = null;
 
-        //private string? OldName = null;
         private int StaffId = 0;
 
         private int GlobalNum = 1;
@@ -77,20 +75,20 @@ namespace BlazorLibrary.Shared.Situation
                     NewSit.SitTypeID = 1;
                 }
                 SelectFolders = new();
+                await ChangeSelectSubsystem(SubSystemList?.FirstOrDefault()?.SubSystID ?? 0);
             }
             else
             {
                 await GetInfoModel();
             }
             IsPageLoad = false;
-            _ = _HubContext.SubscribeAsync(this);
+            _ = _HubContext.SubscribeAndStartAsync(this, typeof(IPubSubMethod));
         }
 
         private async Task LoadList()
         {
             await GetCULists();
             await GetSubSystemList();
-            //await GetObjects_ISituation(SubSystemList?.FirstOrDefault()?.SubSystID ?? 0);
         }
 
         [Description(DaprMessage.PubSubName)]
@@ -116,19 +114,16 @@ namespace BlazorLibrary.Shared.Situation
         /// <returns></returns>
         private async Task GetSubSystemList()
         {
-            await Http.PostAsync("api/v1/GetSubSystemList", null).ContinueWith(async x =>
+            var result = await Http.PostAsync("api/v1/GetSubSystemList", null);
+            if (result.IsSuccessStatusCode)
             {
-                if (x.Result.IsSuccessStatusCode)
+                SubSystemList = await result.Content.ReadFromJsonAsync<List<CcommSubSystem>>();
+                if (SubSystemList != null)
                 {
-                    SubSystemList = await x.Result.Content.ReadFromJsonAsync<List<CcommSubSystem>>();
-
-                    if (SubSystemList != null)
-                    {
-                        SubSystemList.RemoveAll(x => (!CULists?.Where(cu => cu.OBJID.StaffID == StaffId).Any(cu => cu.OBJID.SubsystemID == x.SubSystID) ?? false));
-                    }
-
+                    SubSystemList.RemoveAll(x => (!CULists?.Where(cu => cu.OBJID.StaffID == StaffId).Any(cu => cu.OBJID.SubsystemID == x.SubSystID) ?? false));
+                    SubSystemList = SubSystemList.OrderBy(x => x.Name).ToList();
                 }
-            });
+            }
         }
 
         /// <summary>
@@ -137,17 +132,15 @@ namespace BlazorLibrary.Shared.Situation
         /// <returns></returns>
         private async Task GetCULists()
         {
-            await Http.PostAsync("api/v1/GetCULists", null).ContinueWith(async x =>
+            var result = await Http.PostAsync("api/v1/GetCULists", null);
+            if (result.IsSuccessStatusCode)
             {
-                if (x.Result.IsSuccessStatusCode)
-                {
-                    CULists = await x.Result.Content.ReadFromJsonAsync<List<CUListsItem>>();
-                }
-                else
-                {
-                    MessageView?.AddError("", GSOFormRep["IDS_EGETREGLISTINFO"]);
-                }
-            });
+                CULists = await result.Content.ReadFromJsonAsync<List<CUListsItem>>();
+            }
+            else
+            {
+                MessageView?.AddError("", GSOFormRep["IDS_EGETREGLISTINFO"]);
+            }
         }
 
         private async Task ChangeSubSystem(ChangeEventArgs e)
@@ -165,7 +158,9 @@ namespace BlazorLibrary.Shared.Situation
             if (SubId > 0)
             {
                 if (SubId != SubsystemType.SUBSYST_GSO_STAFF)
+                {
                     await GetObjects_ISituation(SubId);
+                }
                 else
                 {
                     Folders = new();
@@ -184,31 +179,29 @@ namespace BlazorLibrary.Shared.Situation
 
         private async Task GetObjects_ISituation(int SubId)
         {
-            await Http.PostAsJsonAsync("api/v1/GetObjects_ISituation", new OBJ_ID() { StaffID = StaffId, SubsystemID = SubId }).ContinueWith(async x =>
+            var result = await Http.PostAsJsonAsync("api/v1/GetObjects_ISituation", new OBJ_ID() { StaffID = StaffId, SubsystemID = SubId });
+            if (result.IsSuccessStatusCode)
             {
-                if (x.Result.IsSuccessStatusCode)
+                var re = await result.Content.ReadFromJsonAsync<List<Objects>>();
+                if (re != null)
                 {
-                    var re = await x.Result.Content.ReadFromJsonAsync<List<Objects>>();
-                    if (re != null)
+                    Folders ??= new();
+                    Folders.AddRange(re.Select(x => new SituationItem()
                     {
-                        if (Folders == null)
-                            Folders = new();
-
-                        Folders.AddRange(re.Select(x => new SituationItem()
-                        {
-                            SitID = x.OBJID,
-                            SitName = x.Name,
-                            CustMsg = new()
-                        }));
-                    }
-                    else
-                        Folders = new();
+                        SitID = x.OBJID,
+                        SitName = x.Name,
+                        CustMsg = new()
+                    }));
                 }
                 else
                 {
-                    MessageView?.AddError("", GsoRep["ERROR_GET_SIT_INFO"]);
+                    Folders = new();
                 }
-            });
+            }
+            else
+            {
+                MessageView?.AddError("", GsoRep["ERROR_GET_SIT_INFO"]);
+            }
         }
 
         /// <summary>
@@ -219,29 +212,28 @@ namespace BlazorLibrary.Shared.Situation
         {
             if (SitId != null)
             {
-                await Http.PostAsJsonAsync("api/v1/GetSituationInfo", new OBJ_ID() { ObjID = SitId.Value, StaffID = StaffId, SubsystemID = SubsystemID }).ContinueWith(async x =>
+                var result = await Http.PostAsJsonAsync("api/v1/GetSituationInfo", new OBJ_ID() { ObjID = SitId.Value, StaffID = StaffId, SubsystemID = SubsystemID });
+                if (result.IsSuccessStatusCode)
                 {
-                    if (x.Result.IsSuccessStatusCode)
+                    NewSit = await result.Content.ReadFromJsonAsync<SituationInfo>() ?? new();
+
+                    OldSit = new(NewSit);
+
+                    if (NewSit != null)
                     {
-                        NewSit = await x.Result.Content.ReadFromJsonAsync<SituationInfo>() ?? new();
-
-                        OldSit = new(NewSit);
-
-                        if (NewSit != null)
+                        if (IsReadOnly && NewSit.SitTypeID == 0)
                         {
-                            if (IsReadOnly && NewSit.SitTypeID == 0)
-                                IsReadOnly = false;
-
-
-                            int.TryParse(NewSit.CodeName, out GlobalNum);
-                            await GetSituationItemsStaff(NewSit.Sit);
+                            IsReadOnly = false;
                         }
+
+                        int.TryParse(NewSit.CodeName, out GlobalNum);
+                        await GetSituationItemsStaff(NewSit.Sit);
                     }
-                    else
-                    {
-                        MessageView?.AddError("", GsoRep["IDS_EMESSAGEINFO"]);
-                    }
-                });
+                }
+                else
+                {
+                    MessageView?.AddError("", GsoRep["IDS_EMESSAGEINFO"]);
+                }
             }
         }
 
@@ -252,48 +244,57 @@ namespace BlazorLibrary.Shared.Situation
         /// <returns></returns>
         private async Task GetSituationItemsStaff(OBJ_ID request)
         {
-            await Http.PostAsJsonAsync("api/v1/GetSituationItems", request).ContinueWith(async x =>
+            var result = await Http.PostAsJsonAsync("api/v1/GetSituationItems", request);
+            if (result.IsSuccessStatusCode)
             {
-                if (x.Result.IsSuccessStatusCode)
+                OldStaffList = await result.Content.ReadFromJsonAsync<List<SituationItem>>();
+
+                if (OldStaffList != null)
                 {
-                    OldStaffList = await x.Result.Content.ReadFromJsonAsync<List<SituationItem>>();
-
-                    if (OldStaffList != null)
+                    if (SelectFolders == null)
                     {
-                        if (SelectFolders == null)
-                            SelectFolders = new();
-
-                        OldStaffList.ForEach(x =>
-                        {
-                            var n = CULists?.FirstOrDefault(cu => cu.OBJID.StaffID == x.SitID.StaffID && cu.OBJID.SubsystemID == x.SitID.SubsystemID)?.CUName;
-
-                            if (x.SitID.SubsystemID == SubsystemType.SUBSYST_GSO_STAFF)
-                            {
-                                x.SitName = n;
-                            }
-                            else
-                            {
-                                x.SitName = $"{x.SitName} ({n})";
-                            }
-                            if (x.CustMsg == null)
-                                x.CustMsg = new();
-
-                        });
-
-                        SelectFolders = new(OldStaffList.Select(x => new SituationItem(x)));
-
-                        await ChangeSelectSubsystem(SelectFolders.FirstOrDefault()?.SitID?.SubsystemID ?? 0);
-
-                        StateHasChanged();
+                        SelectFolders = new();
                     }
 
+                    OldStaffList.ForEach(x =>
+                    {
+                        var n = CULists?.FirstOrDefault(cu => cu.OBJID.StaffID == x.SitID.StaffID && cu.OBJID.SubsystemID == x.SitID.SubsystemID)?.CUName;
+
+                        if (x.SitID.SubsystemID == SubsystemType.SUBSYST_GSO_STAFF)
+                        {
+                            x.SitName = n;
+                        }
+                        else
+                        {
+                            x.SitName = $"{x.SitName} ({n})";
+                        }
+                        if (x.CustMsg == null)
+                        {
+                            x.CustMsg = new();
+                        }
+
+                    });
+
+                    SelectFolders = new(OldStaffList.Select(x => new SituationItem(x)));
+
+                    await ChangeSelectSubsystem(SelectFolders.FirstOrDefault()?.SitID?.SubsystemID ?? 0);
+
+                    StateHasChanged();
                 }
-                else
-                {
-                    MessageView?.AddError("", GsoRep["IDS_EMESSAGEINFO"]);
-                }
-            });
+
+            }
+            else
+            {
+                MessageView?.AddError("", GsoRep["IDS_EMESSAGEINFO"]);
+            }
         }
+
+        private async Task CloseAll()
+        {
+            ViewMessageList = false;
+            await GoCallBack();
+        }
+
 
         /// <summary>
         /// сохраняем сценарий Staff
@@ -301,15 +302,7 @@ namespace BlazorLibrary.Shared.Situation
         /// <param name="isSave"></param>
         /// <returns></returns>
         private async Task SaveSitStaff(List<SituationItem>? NewStaffList = null)
-        {
-
-            if (IsReadOnly && NewStaffList == null)
-            {
-                ViewMessageList = false;
-                await GoCallBack();
-                return;
-            }
-
+        {                       
             if (NewStaffList == null)
             {
                 ViewMessageList = false;
@@ -372,12 +365,16 @@ namespace BlazorLibrary.Shared.Situation
                 await GoCallBack();
         }
 
-        private List<SituationItem> GetListTree
+        private List<SituationItem>? GetListTree
         {
             get
             {
+                if (SelectSubsystemId == 0)
+                {
+                    return new();
+                }
                 var l = Folders?.Where(x => !SelectFolders?.Any(s => (x.SitID.SubsystemID == SubsystemType.SUBSYST_GSO_STAFF ? s.SitID.StaffID.Equals(x.SitID.StaffID) : s.SitID.Equals(x.SitID))) ?? false).ToList();
-                return l ?? new List<SituationItem>();
+                return l;
             }
 
         }
@@ -430,7 +427,7 @@ namespace BlazorLibrary.Shared.Situation
 
         private void AddAll()
         {
-            if (Folders == null)
+            if (GetListTree == null)
                 return;
             AddToSelectFolders(GetListTree);
         }
@@ -440,7 +437,7 @@ namespace BlazorLibrary.Shared.Situation
             if (SelectFolders == null)
                 SelectFolders = new();
 
-            var newSelect = GetListTree.SkipWhile(x => !items.Contains(x)).FirstOrDefault(x => !items.Contains(x));
+            var newSelect = GetListTree?.SkipWhile(x => !items.Contains(x)).FirstOrDefault(x => !items.Contains(x));
 
             foreach (var item in items)
             {
@@ -458,7 +455,7 @@ namespace BlazorLibrary.Shared.Situation
                 }
             }
             SelectData = null;
-            if (GetListTree.Count > 0)
+            if (GetListTree?.Count > 0)
             {
                 if (newSelect == null)
                 {
@@ -490,7 +487,7 @@ namespace BlazorLibrary.Shared.Situation
                 {
                     var re = await result.Content.ReadFromJsonAsync<IntID>();
 
-                    if (re ==null || re.ID > 0)
+                    if (re == null || re.ID > 0)
                     {
                         IsName = true;
                     }

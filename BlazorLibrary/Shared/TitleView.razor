@@ -1,10 +1,11 @@
-﻿<div class="top-row px-4 mb-3">
-    <div>        
-        @ChildContent
+﻿@if (ChildContent != null)
+{
+    <div class="top-row mb-3">
+        <div class="py-2 px-4 fs-5">
+            @ChildContent
+        </div>       
     </div>
-
-</div>
-
+}
 
 @code
 {

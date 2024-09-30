@@ -1,11 +1,13 @@
-﻿using System.Security.Claims;
+﻿using System.Globalization;
+using System.Security.Claims;
+using BlazorLibrary.Helpers;
 using Microsoft.AspNetCore.Components.Authorization;
 using Microsoft.AspNetCore.Components.WebAssembly.Hosting;
 using Microsoft.Extensions.DependencyInjection;
-using Microsoft.Extensions.Http;
-using Microsoft.Extensions.Localization;
-using ReplaceLibrary;
-using static BlazorLibrary.Shared.Main;
+using Microsoft.JSInterop;
+using SharedLibrary.GlobalEnums;
+using SharedLibrary;
+using BlazorLibrary.GlobalEnums;
 
 namespace BlazorLibrary.ServiceColection
 {
@@ -20,10 +22,10 @@ namespace BlazorLibrary.ServiceColection
             {
                 client.BaseAddress = new Uri(service.GetRequiredService<IWebAssemblyHostEnvironment>().BaseAddress);
                 client.Timeout = TimeSpan.FromMinutes(5);
-            });            
+            });
+
             services.AddTransient<LocalStorage>();
 
-            services.AddTransient<IAuthenticationService, AuthenticationService>();
             services.AddAuthorizationCore(x =>
             {
                 x.AddPolicy("Bearer", policy =>
@@ -37,54 +39,73 @@ namespace BlazorLibrary.ServiceColection
 
             services.AddScoped(sp => sp.GetRequiredService<IHttpClientFactory>().CreateClient("WebAPI"));
 
-            services.AddTransient<AddHeadersHandler>();
-            services.ConfigureAll<HttpClientFactoryOptions>(options =>
-            {
-                options.HttpMessageHandlerBuilderActions.Add(builder =>
-                {
-                    builder.AdditionalHandlers.Add(builder.Services.GetRequiredService<AddHeadersHandler>());
-                });
-            });
-
             services.AddTransient<GetUserInfo>();
             services.AddTransient<HubContextCreate>();
             services.AddTransient<OtherInfoForReport>();
             return services;
         }
 
-
-        public class AddHeadersHandler : DelegatingHandler
+        public static async Task SetHeaderAndRunAsync(this WebAssemblyHost host)
         {
-            private readonly IStringLocalizer<DeviceReplace> DeviceRep;
-            private readonly IStringLocalizer<SMDataReplace> SMDataRep;
-            private readonly AuthenticationStateProvider _authStateProvider;
-            private readonly LocalStorage _localStorage;
+            await host.Services.SetDefaultHeaderHttpClient();
+            await host.RunAsync();
+        }
 
-            public AddHeadersHandler(IStringLocalizer<DeviceReplace> _DeviceRep, IStringLocalizer<SMDataReplace> _SMDataRep, AuthenticationStateProvider authStateProvider, LocalStorage localStorage)
+        static async Task SetDefaultHeaderHttpClient(this IServiceProvider provider)
+        {
+            var culture = new CultureInfo("ru-RU");
+
+            var js = provider.GetService<IJSRuntime>();
+            try
             {
-                DeviceRep = _DeviceRep;
-                SMDataRep = _SMDataRep;
-                _authStateProvider = authStateProvider;
-                _localStorage = localStorage;
+                if (js != null)
+                {
+                    var result = await js.InvokeAsync<string>("getCultureGlobal");
+
+                    if (result != null && SupportLanguage.Get.Contains(result))
+                    {
+                        culture = new CultureInfo(result);
+                    }
+                    else if (SupportLanguage.Get.Contains(CultureInfo.CurrentUICulture.Name))
+                    {
+                        culture = CultureInfo.CurrentUICulture;
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine(ex.Message);
             }
 
-            protected override async Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken = default)
+            var _http = provider.GetService<HttpClient>();
+            if (_http != null)
             {
-                var r = await base.SendAsync(request, cancellationToken);
+                _http.DefaultRequestHeaders.AcceptLanguage.Add(new System.Net.Http.Headers.StringWithQualityHeaderValue(culture.Name));
 
-                if (r.StatusCode == System.Net.HttpStatusCode.Forbidden)
+                _http.DefaultRequestHeaders.AddHeader(MetaDataName.TimeZone, TimeZoneInfo.Local.Id);
+                _http.DefaultRequestHeaders.Date = DateTimeOffset.Now;
+                try
                 {
-                    MessageView?.Clear();
-                    MessageView?.AddError(SMDataRep["IDS_ACCESS_DENIDE"], DeviceRep["IDS_STRING_SUBSYSTEM_NOT_PERMISSIONS"]);
+                    if (js != null)
+                    {
+                        var appId = await js.InvokeAsync<string>("localStorage.getItem", CookieName.AppId);
+                        if (string.IsNullOrEmpty(appId))
+                        {
+                            appId = Guid.NewGuid().ToString();
+
+                            await js.InvokeVoidAsync("localStorage.setItem", CookieName.AppId, appId);
+                        }
+                        _http.DefaultRequestHeaders.AddHeader(nameof(CookieName.AppId), appId);
+                    }
                 }
-                if (r.StatusCode == System.Net.HttpStatusCode.Unauthorized)
+                catch (Exception ex)
                 {
-                    ((AuthStateProvider)_authStateProvider).NotifyUserLogout();
-                    _ = _localStorage.RemoveAllAsync();
-                    MessageView?.Clear();
+                    Console.WriteLine(ex.Message);
                 }
-                return r;
             }
+
+            CultureInfo.DefaultThreadCurrentCulture = culture;
+            CultureInfo.DefaultThreadCurrentUICulture = culture;
         }
 
     }

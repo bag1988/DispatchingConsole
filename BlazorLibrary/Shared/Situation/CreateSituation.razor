@@ -1,6 +1,7 @@
 ﻿@using FiltersGSOProto.V1;
 @using SMDataServiceProto.V1;
 @inherits FiltrInherits<SitStartFiltr>
+@inject ILogger<CreateSituation> _logger
 
 <ModalDialog ButtonCloseEvent="GoCallBack" Title="@GetTextTitle">
     <BodyContent>
@@ -108,14 +109,22 @@
                                     </ChildButton>
                                 </DropdownMenu>
                             }
+                            else
+                            {
+                                <BDark IsDisabled="@(true)" Text="@UUZSRep["IDS_STRING_ADD"]" />
+                            }
                         }
                     </AddBackButons>
                     <AddNextButons Context="resultList">
                         @if (resultList.Any() && !string.IsNullOrEmpty(NewSit.SitName))
                         {
-                            <CheckP BitPosList="@(new[]{NameBitsPos.Create, NameBitsPos.CreateNoStandart})">
+                            <CheckP BitPosList="@(new[]{NameBitsPos.CreateSit, NameBitsPos.CreateNoStandart})">
                                 <BSumbit IsProcessing="context" Text="@GsoRep["IDS_STRING_NEXT"]" AddClass="m-1 ms-auto" />
                             </CheckP>
+                        }
+                        else
+                        {
+                            <BDark IsDisabled="@(true)" AddClass="m-1 ms-auto" Text="@GsoRep["IDS_STRING_NEXT"]" />
                         }
                     </AddNextButons>
                 </ListTreeNew>
@@ -128,7 +137,7 @@
     </BodyContent>
 </ModalDialog>
 
-<CheckP BitPosList="@(new[]{NameBitsPos.Create, NameBitsPos.CreateNoStandart})">
+<CheckP BitPosList="@(new[]{NameBitsPos.CreateSit, NameBitsPos.CreateNoStandart})">
     @*Добавить устройство*@
     @if (IsCreateDevice == true)
     {
@@ -163,11 +172,11 @@
     {
         @if (SystemId == SubsystemType.SUBSYST_ASO)
         {
-            <AsoPage MsgID="MsgID" NextAction="SaveSit" IsReadOnly="IsReadOnly" />
+            <AsoPage MsgID="MsgID" NextAction="SaveSit" CloseAllAction="CloseAll" IsReadOnly="IsReadOnly" />
         }
         else if (SystemId == SubsystemType.SUBSYST_SZS)
         {
-            <SzsPage IsIndividualMode="@(IsIndividualMode==1?true:false)" ObjectList="SelectFolders?.SelectMany(x=>x.Child).ToList()" IsReadOnly="IsReadOnly" NextAction="SaveSitSzs" />
+            <SzsPage IsIndividualMode="@(IsIndividualMode==1?true:false)" CloseAllAction="CloseAll" ObjectList="SelectFolders?.SelectMany(x=>x.Child).ToList()" IsReadOnly="IsReadOnly" NextAction="SaveSitSzs" />
         }
     }
 

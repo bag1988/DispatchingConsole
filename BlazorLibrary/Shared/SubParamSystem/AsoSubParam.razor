@@ -6,21 +6,21 @@
     <div class="row mb-2">
         <label class="form-label col-md-4">@GsoRep["IDS_STRING_TIMEOUT_BETWEEN_CALL_BUSY"]</label>
         <div class="col-md-8">
-            <input type="number" max="9999" class="form-control" @bind="SubParam.TimeoutAbBu" required>
+            <input type="number" max="9999" class="form-control" @bind="SubParam.TimeoutAbBu" @bind:after="CallEvent" required>
         </div>
     </div>
     @*Таймаут между дозвонами при "нет ответа" для Vip абонентов (с):*@
     <div class="row mb-2">
         <label class="form-label col-md-4">@AsoRep["TimoutNoAnswerVip"]</label>
         <div class="col-md-8">
-            <input type="number" max="99999999" class="form-control" @bind="SubParam.VipTioutNo" required>
+            <input type="number" max="99999999" class="form-control" @bind="SubParam.VipTioutNo" @bind:after="CallEvent" required>
         </div>
     </div>
     @*Таймаут между дозвонами при ответе "занято" для Vip абонентов (с):*@
     <div class="row">
         <label class="form-label col-md-4">@AsoRep["TimoutBusyVip"]</label>
         <div class="col-md-8">
-            <input type="number" max="99999999" class="form-control" @bind="SubParam.VipTioutBu" required>
+            <input type="number" max="99999999" class="form-control" @bind="SubParam.VipTioutBu" @bind:after="CallEvent" required>
         </div>
     </div>
 }
@@ -30,8 +30,18 @@ else
 }
 
 
-
 @code {
     [Parameter]
     public SubsystemParam? SubParam { get; set; }
+
+    [Parameter]
+    public EventCallback CallEventChange { get; set; }
+
+    async Task CallEvent()
+    {
+        if (CallEventChange.HasDelegate)
+        {
+            await CallEventChange.InvokeAsync();
+        }
+    }
 }

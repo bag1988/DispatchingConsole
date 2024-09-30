@@ -1,21 +1,10 @@
-﻿using System;
-using System.Collections.Generic;
-using System.Diagnostics;
-using System.Linq;
-using System.Reflection;
-using System.Reflection.Emit;
-using System.Text;
-using System.Threading.Tasks;
-using BlazorLibrary.FolderForInherits;
-using BlazorLibrary.GlobalEnums;
+﻿using BlazorLibrary.GlobalEnums;
 using BlazorLibrary.Helpers;
 using BlazorLibrary.Models;
 using FiltersGSOProto.V1;
-using Google.Protobuf.WellKnownTypes;
 using Microsoft.AspNetCore.Components;
-using Microsoft.AspNetCore.Components.Routing;
 using Microsoft.AspNetCore.Components.Web;
-using Microsoft.AspNetCore.Components.Web.Virtualization;
+using Microsoft.Extensions.Logging;
 using Microsoft.JSInterop;
 
 namespace BlazorLibrary.Shared.FiltrComponent
@@ -237,44 +226,51 @@ namespace BlazorLibrary.Shared.FiltrComponent
 
         async Task OnKeyDown(KeyboardEventArgs e)
         {
-            if (e.CtrlKey || e.AltKey || e.ShiftKey) return;
+            try
+            {
+                if (e.CtrlKey || e.AltKey || e.ShiftKey) return;
 
-            if (e.Key == "Escape")
-            {
-                ClearActive();
-            }
-            else if (e.Key == "Enter")
-            {
-                if (FocusHints != null)
-                    await SetActive(FocusHints);
-                else if (FocusOperation != null && FocusOperation.Key != FiltrOperationType.None)
-                    await SetOperation(FocusOperation);
-                else if (FocusHint != null)
-                    await SetValueHint(FocusHint);
-                else
+                if (e.Key == "Escape")
                 {
-                    await OnClick();
-                    StateHasChanged();
-                    await Task.Yield();
-                    await OnFocusInput();
+                    ClearActive();
                 }
-            }
-            else if (e.Key == "ArrowDown" || e.Key == "ArrowUp")
-            {
-                var index = e.Key == "ArrowUp" ? -1 : 1;
+                else if (e.Key == "Enter")
+                {
+                    if (FocusHints != null)
+                        await SetActive(FocusHints);
+                    else if (FocusOperation != null && FocusOperation.Key != FiltrOperationType.None)
+                        await SetOperation(FocusOperation);
+                    else if (FocusHint != null)
+                        await SetValueHint(FocusHint);
+                    else
+                    {
+                        await OnClick();
+                        StateHasChanged();
+                        await Task.Yield();
+                        await OnFocusInput();
+                    }
+                }
+                else if (e.Key == "ArrowDown" || e.Key == "ArrowUp")
+                {
+                    var index = e.Key == "ArrowUp" ? -1 : 1;
 
-                if (SelectHints == null && Hints != null)
-                {
-                    FocusHints = Hints.Where(x => x.Name.Contains(TempValue.Value ?? "")).GetNextSelectItem(FocusHints, index);
+                    if (SelectHints == null && Hints != null)
+                    {
+                        FocusHints = Hints.Where(x => x.Name.Contains(TempValue.Value ?? "")).GetNextSelectItem(FocusHints, index);
+                    }
+                    else if (SelectHints != null && SelectHints.Operation == FiltrOperationType.None)
+                    {
+                        FocusOperation = OperandTypes.Where(x => x.Name.Contains(TempValue.Value ?? "")).GetNextSelectItem(FocusOperation, index);
+                    }
+                    else if (SelectHints != null && SelectHints.Provider?.IsData == true)
+                    {
+                        FocusHint = SelectHints.Provider.CacheItems.Where(x => x.Value.Contains(TempValue.Value ?? "")).GetNextSelectItem(FocusHint, index);
+                    }
                 }
-                else if (SelectHints != null && SelectHints.Operation == FiltrOperationType.None)
-                {
-                    FocusOperation = OperandTypes.Where(x => x.Name.Contains(TempValue.Value ?? "")).GetNextSelectItem(FocusOperation, index);
-                }
-                else if (SelectHints != null && SelectHints.Provider?.IsData == true)
-                {
-                    FocusHint = SelectHints.Provider.CacheItems.Where(x => x.Value.Contains(TempValue.Value ?? "")).GetNextSelectItem(FocusHint, index);
-                }
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError("Error is {nameof}: {message}", nameof(OnKeyDown), ex.Message);
             }
         }
 
@@ -292,168 +288,258 @@ namespace BlazorLibrary.Shared.FiltrComponent
 
         async Task OnClick()
         {
-            if (AddItemFiltr.HasDelegate && !string.IsNullOrEmpty(TempValue?.Value))
+            try
             {
-                if (SelectHints == null)
+                if (AddItemFiltr.HasDelegate && !string.IsNullOrEmpty(TempValue?.Value))
                 {
-                    SelectHints = Hints.FirstOrDefault(x => x.Type == TypeHint.Select || x.Type == TypeHint.ContainsOnly || x.Type == TypeHint.Input);
                     if (SelectHints == null)
                     {
-                        ClearActive();
-                        return;
+                        SelectHints = Hints.FirstOrDefault(x => x.Type == TypeHint.Select || x.Type == TypeHint.ContainsOnly || x.Type == TypeHint.Input);
+                        if (SelectHints == null)
+                        {
+                            ClearActive();
+                            return;
+                        }
+                        SelectHints.Operation = FiltrOperationType.Contains;
                     }
-                    SelectHints.Operation = FiltrOperationType.Contains;
-                }
-                else
-                {
-                    if (SelectHints.Type == TypeHint.OnlySelect && (!SelectHints.Provider?.CacheItems.Any(x => x.Value == TempValue.Value) ?? true))
+                    else
                     {
-                        ClearActive();
-                        return;
+                        if (SelectHints.Type == TypeHint.OnlySelect && (!SelectHints.Provider?.CacheItems.Any(x => x.Value == TempValue.Value) ?? true))
+                        {
+                            ClearActive();
+                            return;
+                        }
                     }
+
+
+                    await AddItemFiltr.InvokeAsync(new() { new FiltrItem(SelectHints.Key, TempValue, SelectHints.Operation) });
+
+                    await Task.Yield();
+                    await SaveLocalStorge();
                 }
-
-
-                await AddItemFiltr.InvokeAsync(new() { new FiltrItem(SelectHints.Key, TempValue, SelectHints.Operation) });
-
-                await Task.Yield();
-                await SaveLocalStorge();
+                ClearActive();
             }
-            ClearActive();
+            catch (Exception ex)
+            {
+                _logger.LogError("Error is {nameof}: {message}", nameof(OnClick), ex.Message);
+            }
         }
 
         async Task OnClickHistory(List<FiltrItem> items)
         {
-            if (AddItemFiltr.HasDelegate)
+            try
             {
-                await AddItemFiltr.InvokeAsync(items);
+                if (AddItemFiltr.HasDelegate)
+                {
+                    await AddItemFiltr.InvokeAsync(items);
+                }
+                IsViewHistory = false;
             }
-            IsViewHistory = false;
+            catch (Exception ex)
+            {
+                _logger.LogError("Error is {nameof}: {message}", nameof(OnClickHistory), ex.Message);
+            }
         }
 
         async Task SetActive(HintItem item)
         {
-            SelectHints = new(item.Key, item.Name, item.Type, item.Value, item.Operation, item.Provider);
-            FocusHints = null;
-            TempValue = new(string.Empty);
-            input?.FocusAsync(true);
-            await Task.Yield();
-            await OnFocusInput();
+            try
+            {
+                SelectHints = new(item.Key, item.Name, item.Type, item.Value, item.Operation, item.Provider);
+                FocusHints = null;
+                TempValue = new(string.Empty);
+                input?.FocusAsync(true);
+                await Task.Yield();
+                await OnFocusInput();
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError("Error is {nameof}: {message}", nameof(SetActive), ex.Message);
+            }
         }
 
         async Task SaveLocalStorge()
         {
-
-            LastRequest = await _localStorage.FiltrSaveLastRequest(UserName, PlaceHolder, Items) ?? new();
+            try
+            {
+                LastRequest = await _localStorage.FiltrSaveLastRequest(UserName, PlaceHolder, Items) ?? new();
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError("Error is {nameof}: {message}", nameof(SaveLocalStorge), ex.Message);
+            }
         }
 
         async Task RemoveItem(FiltrItem item)
         {
-            if (RemoveItemsFiltr.HasDelegate)
-                await RemoveItemsFiltr.InvokeAsync(new List<FiltrItem>() { item });
-            await Task.Yield();
-            await SaveLocalStorge();
-            input?.FocusAsync(true);
+            try
+            {
+                if (RemoveItemsFiltr.HasDelegate)
+                    await RemoveItemsFiltr.InvokeAsync(new List<FiltrItem>() { item });
+                await Task.Yield();
+                await SaveLocalStorge();
+                input?.FocusAsync(true);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError("Error is {nameof}: {message}", nameof(RemoveItem), ex.Message);
+            }
         }
 
         async Task RemoveAll()
         {
-            if (RemoveItemsFiltr.HasDelegate && Items?.Count > 0)
+            try
             {
-                await RemoveItemsFiltr.InvokeAsync(new List<FiltrItem>(Items));
+                if (RemoveItemsFiltr.HasDelegate && Items?.Count > 0)
+                {
+                    await RemoveItemsFiltr.InvokeAsync(new List<FiltrItem>(Items));
+                }
+                await Task.Yield();
+                await SaveLocalStorge();
+                ClearActive();
             }
-            await Task.Yield();
-            await SaveLocalStorge();
-            ClearActive();
+            catch (Exception ex)
+            {
+                _logger.LogError("Error is {nameof}: {message}", nameof(RemoveAll), ex.Message);
+            }
         }
 
         async Task SetValueDate()
         {
-            if (SelectHints == null || (DateStart == null && DateEnd == null))
-                return;
-
-            string formatDate = SelectHints.Type == TypeHint.DateOnly ? "d" : "g";
-
-            if (SelectHints.Operation == FiltrOperationType.Range)
-                TempValue = new($"{DateStart?.ToString(formatDate)}-{DateEnd?.ToString(formatDate)}");
-            else
+            try
             {
-                TempValue = new($"{DateStart?.ToString(formatDate)}");
+                if (SelectHints == null || (DateStart == null && DateEnd == null))
+                    return;
+
+                string formatDate = SelectHints.Type == TypeHint.DateOnly ? "d" : "g";
+
+                if (SelectHints.Operation == FiltrOperationType.Range)
+                    TempValue = new($"{DateStart?.ToString(formatDate)}-{DateEnd?.ToString(formatDate)}");
+                else
+                {
+                    TempValue = new($"{DateStart?.ToString(formatDate)}");
+                }
+                input?.FocusAsync(true);
+                await OnFocusInput();
             }
-            input?.FocusAsync(true);
-            await OnFocusInput();
+            catch (Exception ex)
+            {
+                _logger.LogError("Error is {nameof}: {message}", nameof(SetValueDate), ex.Message);
+            }
         }
 
         async Task SetValueTime()
         {
-            if (SelectHints == null || (DateStart == null && DateEnd == null))
-                return;
-
-            if (SelectHints.Operation == FiltrOperationType.Range)
-                TempValue = new($"{DateStart?.ToString("t")}-{DateEnd?.ToString("t")}");
-            else
+            try
             {
-                TempValue = new($"{DateStart?.ToString("t")}");
+                if (SelectHints == null || (DateStart == null && DateEnd == null))
+                    return;
+
+                if (SelectHints.Operation == FiltrOperationType.Range)
+                    TempValue = new($"{DateStart?.ToString("t")}-{DateEnd?.ToString("t")}");
+                else
+                {
+                    TempValue = new($"{DateStart?.ToString("t")}");
+                }
+                input?.FocusAsync(true);
+                await OnFocusInput();
             }
-            input?.FocusAsync(true);
-            await OnFocusInput();
+            catch (Exception ex)
+            {
+                _logger.LogError("Error is {nameof}: {message}", nameof(SetValueTime), ex.Message);
+            }
         }
 
         async Task SetValueDuration()
         {
-            if (SelectHints == null || (DurationStart == null && DurationEnd == null))
-                return;
-
-            if (SelectHints.Operation == FiltrOperationType.Range)
-                TempValue = new($"{DurationStart?.ToString("dd\\.hh\\:mm")}-{DurationEnd?.ToString("dd\\.hh\\:mm")}");
-            else
+            try
             {
-                TempValue = new($"{DurationStart?.ToString("dd\\.hh\\:mm")}");
+                if (SelectHints == null || (DurationStart == null && DurationEnd == null))
+                    return;
+
+                if (SelectHints.Operation == FiltrOperationType.Range)
+                    TempValue = new($"{DurationStart?.ToString("dd\\.hh\\:mm")}-{DurationEnd?.ToString("dd\\.hh\\:mm")}");
+                else
+                {
+                    TempValue = new($"{DurationStart?.ToString("dd\\.hh\\:mm")}");
+                }
+                input?.FocusAsync(true);
+                await OnFocusInput();
             }
-            input?.FocusAsync(true);
-            await OnFocusInput();
+            catch (Exception ex)
+            {
+                _logger.LogError("Error is {nameof}: {message}", nameof(SetValueDuration), ex.Message);
+            }
         }
 
         async Task SetValueHint(Hint item)
         {
-            if (SelectHints == null)
-                return;
-            TempValue = item;
-            FocusHint = null;
-            input?.FocusAsync(true);
-            await OnFocusInput();
+            try
+            {
+                if (SelectHints == null)
+                    return;
+                TempValue = item;
+                FocusHint = null;
+                input?.FocusAsync(true);
+                await OnFocusInput();
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError("Error is {nameof}: {message}", nameof(SetValueHint), ex.Message);
+            }
         }
 
         async Task SetValueHintBool(bool value)
         {
-            if (SelectHints == null)
-                return;
-            TempValue = new(value ? GsoRep["YES"] : GsoRep["NO"], value.ToString());
-            FocusHint = null;
-            input?.FocusAsync(true);
-            await OnFocusInput();
+            try
+            {
+                if (SelectHints == null)
+                    return;
+                TempValue = new(value ? GsoRep["YES"] : GsoRep["NO"], value.ToString());
+                FocusHint = null;
+                input?.FocusAsync(true);
+                await OnFocusInput();
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError("Error is {nameof}: {message}", nameof(SetValueHintBool), ex.Message);
+            }
         }
 
         async Task SetOperation(OperationItem item)
         {
-            if (SelectHints == null)
-                return;
-            SelectHints.Operation = item.Key;
-            FocusOperation = null;
-            TempValue = new(string.Empty);
-            if (SelectHints.Provider?.IsData == true)
+            try
             {
-                await SelectHints.Provider.AddData();
+                if (SelectHints == null)
+                    return;
+                SelectHints.Operation = item.Key;
+                FocusOperation = null;
+                TempValue = new(string.Empty);
+                if (SelectHints.Provider?.IsData == true)
+                {
+                    await SelectHints.Provider.AddData();
+                }
+                input?.FocusAsync(true);
+                await OnFocusInput();
             }
-            input?.FocusAsync(true);
-            await OnFocusInput();
+            catch (Exception ex)
+            {
+                _logger.LogError("Error is {nameof}: {message}", nameof(SetOperation), ex.Message);
+            }
         }
 
         async Task ClearHistory()
         {
-            IsViewHistory = false;
-            LastRequest = new();
-            await _localStorage.FiltrClearLastRequest(UserName, PlaceHolder);
+            try
+            {
+                IsViewHistory = false;
+                LastRequest = new();
+                await _localStorage.FiltrClearLastRequest(UserName, PlaceHolder);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError("Error is {nameof}: {message}", nameof(ClearHistory), ex.Message);
+            }
         }
 
         IEnumerable<HintItem> GetHintsItems

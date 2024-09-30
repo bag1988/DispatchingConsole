@@ -101,12 +101,12 @@
     this.videos = [];
     this.isStopDrawingFrames = true;
     this.calcSize();
-    this.audioContext.close();
+    this.audioContext?.close();
     this.audioContext = null;
 
     this.captureStream?.getTracks().forEach(track => {
       track.stop();
-      this.captureStream.removeTrack(track);
+      this.captureStream?.removeTrack(track);
     });
     this.captureStream = null;
   }

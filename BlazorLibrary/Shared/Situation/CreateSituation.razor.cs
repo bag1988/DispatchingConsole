@@ -17,6 +17,7 @@ using BlazorLibrary.GlobalEnums;
 using FiltersGSOProto.V1;
 using Label.V1;
 using LibraryProto.Helpers;
+using Microsoft.Extensions.Logging;
 
 namespace BlazorLibrary.Shared.Situation
 {
@@ -108,7 +109,7 @@ namespace BlazorLibrary.Shared.Situation
                 PlaceHolder = FiltrName.FiltrSitStart;
             }
             IsPageLoad = false;
-            _ = _HubContext.SubscribeAsync(this);
+            _ = _HubContext.SubscribeAndStartAsync(this, typeof(IPubSubMethod));
         }
 
         private async Task GetLabelsForFiltr()
@@ -591,6 +592,12 @@ namespace BlazorLibrary.Shared.Situation
             ViewMessageList = false;
         }
 
+        private async Task CloseAll()
+        {
+            ViewMessageList = false;
+            await GoCallBack();
+        }
+
         private async Task SaveSituation()
         {
             if (IsReadOnly)
@@ -647,6 +654,9 @@ namespace BlazorLibrary.Shared.Situation
 
             bool ErrorSave = false;
             int sitId = 0;
+
+            await GetGroupItemList(Sit);
+
             if (SitId != null)
             {
                 var deletelist = OldList?.Where(x => !Sit.Items.Any(c => c.SZSDevID == x.SZSDevID && c.SZSGroupID == x.SZSGroupID && c.AsoAbonID == x.AsoAbonID)).ToList() ?? new();
@@ -690,28 +700,6 @@ namespace BlazorLibrary.Shared.Situation
 
                     await Http.PostAsJsonAsync("api/v1/DeleteSitItem", JsonFormatter.Default.Format(DeleteRequest));
 
-                }
-
-                var groupList = Sit.Items.Where(x => x.SZSGroupID > 0 && (!OldList?.Any(c => c.SZSDevID == x.SZSDevID && c.SZSGroupID == x.SZSGroupID && c.AsoAbonID == x.AsoAbonID) ?? true)).ToList() ?? new();
-
-                if (groupList.Any())
-                {
-                    foreach (var item in groupList)
-                    {
-                        OBJ_ID requestGroupInfo = new();
-                        requestGroupInfo.ObjID = item.SZSGroupID;
-                        requestGroupInfo.StaffID = item.SZSGroupStaffID;
-
-                        CGetSitItemInfo newGroup = new();
-                        newGroup.CmdSubsystemID = Sit.Info?.Sit?.SubsystemID ?? SubsystemType.SUBSYST_SZS;
-                        newGroup.CmdID = 7;
-                        newGroup.SZSGroupID = item.SZSGroupID;
-                        newGroup.SZSGroupStaffID = item.SZSGroupStaffID;
-                        var l = await GetGroupItemList(requestGroupInfo);
-
-                        if (l.Any())
-                            Sit.Items.AddRange(l.Select(x => new CGetSitItemInfo(newGroup) { SZSDevID = x.DevID, SZSDevStaffID = x.DevStaffID }));
-                    }
                 }
 
                 Sit.Items = Sit.Items.Except(OldList ?? new()).ToList();
@@ -769,7 +757,9 @@ namespace BlazorLibrary.Shared.Situation
                     x.Child.ForEach(c =>
                     {
                         if (items.Any(i => i.SZSDevID == c.SZSDevID && i.SZSGroupID == c.SZSGroupID))
+                        {
                             c = items.First(i => i.SZSDevID == c.SZSDevID && i.SZSGroupID == c.SZSGroupID);
+                        }
                     });
                 });
                 await SaveSituation();
@@ -778,7 +768,45 @@ namespace BlazorLibrary.Shared.Situation
         }
 
 
-        private async Task<List<CGroupDevID>> GetGroupItemList(OBJ_ID req)
+        private async Task GetGroupItemList(UpdateSituation sit)
+        {
+            try
+            {
+                if (sit.Items != null)
+                {
+                    var groupList = sit.Items.Where(x => x.SZSGroupID > 0 && (!OldList?.Any(c => c.SZSDevID == x.SZSDevID && c.SZSGroupID == x.SZSGroupID && c.AsoAbonID == x.AsoAbonID) ?? true)).ToList() ?? new();
+
+                    if (groupList.Any())
+                    {
+                        foreach (var item in groupList)
+                        {
+                            OBJ_ID requestGroupInfo = new();
+                            requestGroupInfo.ObjID = item.SZSGroupID;
+                            requestGroupInfo.StaffID = item.SZSGroupStaffID;
+
+                            CGetSitItemInfo newGroup = new();
+                            newGroup.CmdSubsystemID = sit.Info?.Sit?.SubsystemID ?? SubsystemType.SUBSYST_SZS;
+                            newGroup.CmdID = 7;
+                            newGroup.SZSGroupID = item.SZSGroupID;
+                            newGroup.SZSGroupStaffID = item.SZSGroupStaffID;
+
+                            var l = await GetGroupItemListInfo(requestGroupInfo);
+
+                            if (l.Any())
+                            {
+                                sit.Items.AddRange(l.Select(x => new CGetSitItemInfo(newGroup) { SZSDevID = x.DevID, SZSDevStaffID = x.DevStaffID }));
+                            }
+                        }
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError("Ошибка получения устройств группы: {message}", ex.Message);
+            }
+        }
+
+        private async Task<List<CGroupDevID>> GetGroupItemListInfo(OBJ_ID req)
         {
             List<CGroupDevID> response = new();
             var result = await Http.PostAsJsonAsync("api/v1/GetGroupItemList", req);

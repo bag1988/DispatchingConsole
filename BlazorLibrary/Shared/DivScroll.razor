@@ -1,4 +1,4 @@
 ﻿@inject ILogger<DivScroll> _logger
-<div @ref="div" class="@(IsSticky == true?"table-scroll-v":"")  table-responsive @SetClass" style="@(IsMaxHeigth? "max-height": "height"): @MaxHeigth">
+<div @ref="div" class="table-responsive @SetClass" style="max-height: @(MaxHeight); min-height: @(MinHeight);">
     @ChildContent
 </div>

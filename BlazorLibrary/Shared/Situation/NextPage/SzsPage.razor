@@ -3,7 +3,7 @@
 @using SharedLibrary.GlobalEnums
 @inject ILogger<SzsPage> _logger
 
-<ModalDialog Title="@(ObjectList?.LastOrDefault()?.Name??GsoRep["IDS_STRING_CREATE_SIT_SZS"])" ButtonCloseEvent="Cancel">
+<ModalDialog Title="@(ObjectList?.LastOrDefault()?.Name??GsoRep["IDS_STRING_CREATE_SIT_SZS"])" ButtonCloseEvent="Close">
     <BodyContent>
         <BlazorLibrary.Shared.FormComponent.FormDefault OnSumbit="Next">
             @if (IsLoadPage)
@@ -16,7 +16,7 @@
 
                 @*Выбор комманды*@
                 <div class="mb-2">
-                    <select class="form-select form-select-sm" @bind="PrdItem.CmdID" required>
+                    <select class="form-select form-select-sm" @bind="PrdItem.CmdID" disabled="@(IsReadOnly==true? "disabled": null)" required>
                         @if (m_CmdList != null)
                         {
                             @foreach (var item in m_CmdList)
@@ -29,7 +29,7 @@
 
                 @*Выбор номера комманды*@
                 <div class="mb-2">
-                    <select class="form-select form-select-sm" @bind="PrdItem.CmdParam" required>
+                    <select class="form-select form-select-sm" @bind="PrdItem.CmdParam" required disabled="@(IsReadOnly==true? "disabled": null)">
                         <option value="1">@SMP16xRep["COMMAND_1"]</option>
                         <option value="2">@SMP16xRep["COMMAND_2"]</option>
                         <option value="3">@SMP16xRep["COMMAND_3"]</option>
@@ -41,7 +41,7 @@
 
                 @*Выбор сообщения для ПРД*@
                 <div class="mb-2">
-                    <select class="form-select form-select-sm" @bind="PrdItem.MsgID">
+                    <select class="form-select form-select-sm" @bind="PrdItem.MsgID" disabled="@(IsReadOnly==true? "disabled": null)">
                         <ItemsSelectMsg IsAllMsg="IsAllMsg" MsgList="MsgList" SubsystemID="SubsystemType.SUBSYST_SZS" />
                     </select>
                 </div>
@@ -88,30 +88,26 @@
                                 @*Включение сирены*@
                                 <div class="mb-2">
                                     <label class="form-check-label">
-                                        <input class="form-check-input" type="checkbox" checked="@(Bits.CHECK_BIT(ItemFirst.Param1, 17))" @onchange="()=>OnButtonClicked(1041)"> @UUZSDataRep["IDC_ONSIRENA"]
+                                        <input class="form-check-input" type="checkbox" checked="@(bSirenaOn)" @onchange="()=>OnButtonClicked(1041)"> @UUZSDataRep["IDC_ONSIRENA"]
                                     </label>
                                 </div>
-
                             }
                         }
 
                     </div>
                     <div class="col-md-6">
-                        @if (Bits.CHECK_BIT(ItemFirst.Param1, 17) && !bPvsOn && interceptMode == 2)
+                        @if (bSirenaOn && !bPvsOn && interceptMode == 2)
                         {
                             @*Режим*@
-                            @if (IsIndividualMode == false)
-                            {
-                                <div class="mb-2">
-                                    <label class="form-label">@UUZSDataRep["IDC_STATIC_SIRENA_TYPE"]</label>
-                                    <select class="form-select" value="@IDC_SIRENA_TYPE" @onchange="ChangeSirenaMode">
-                                        @*Прерывистая (ВНИМАНИЕ ВСЕМ)*@
-                                        <option value="0">@UUZSDataRep["SIRENA_TYPE1"]</option>
-                                        @*Непрерывная (ВОЗДУШНАЯ ТРЕВОГА)*@
-                                        <option value="1">@UUZSDataRep["SIRENA_TYPE2"]</option>
-                                    </select>
-                                </div>
-                            }
+                            <div class="mb-2">
+                                <label class="form-label">@UUZSDataRep["IDC_STATIC_SIRENA_TYPE"]</label>
+                                <select class="form-select" value="@IDC_SIRENA_TYPE" disabled="@(IsIndividualMode == true)" @onchange="ChangeSirenaMode">
+                                    @*Прерывистая (ВНИМАНИЕ ВСЕМ)*@
+                                    <option value="0">@UUZSDataRep["SIRENA_TYPE1"]</option>
+                                    @*Непрерывная (ВОЗДУШНАЯ ТРЕВОГА)*@
+                                    <option value="1">@UUZSDataRep["SIRENA_TYPE2"]</option>
+                                </select>
+                            </div>
 
                             @*Длительность*@
                             <div class="mb-2">
@@ -224,45 +220,58 @@
             }
             <ButtonModal>
                 <label class="form-check-label me-2">
-                    <input class="form-check-input" type="checkbox" checked="@IsAllMsg" @onchange="@((e)=>SetAllView(e))"> @Rep["AllMessage"]
+                    <input class="form-check-input" type="checkbox" checked="@IsAllMsg" disabled="@(IsReadOnly==true? "disabled": null)" @onchange="@((e)=>SetAllView(e))"> @Rep["AllMessage"]
                 </label>
-                @if (IsReadOnly == false)
-                {
-                    <BDark OnClick="@(()=>{ViewInfoMessage=true; IsNewMessage=true;})" Text="@GsoRep["ID_RECORD"]" />
-                }
-                @if (IsViewMessage)
-                {
-                    <BDark OnClick="@(()=>{ViewInfoMessage=true; IsNewMessage=false;})" Text="@AsoRep["ReadMessage"]" />
-                }
+                <BDark OnClick="@(()=>{ViewInfoMessage=true; IsNewMessage=true;})" Text="@GsoRep["ID_RECORD"]" IsDisabled="@(IsReadOnly==true)" />
+                <BDark OnClick="@(()=>{ViewInfoMessage=true; IsNewMessage=false;})" Text="@AsoRep["ReadMessage"]" IsDisabled="@(!IsViewMessage)" />
                 <div class="ms-auto">
-                    <CheckP BitPosList="@(new[]{NameBitsPos.Create, NameBitsPos.CreateNoStandart})">
-                        @if (IsReadOnly == false)
+                    <CheckP BitPosList="@(new[]{NameBitsPos.CreateSit, NameBitsPos.CreateNoStandart})">
+                        @if (IsCreatePrd)
                         {
-                            @if (IsCreatePrd)
+                            @if (SzsList != null)
                             {
-                                <BSumbit SetFocus="true" IsProcessing="context" Text="@(SzsList==null?GsoRep["IDS_STRING_SAVE"]:GsoRep["IDS_STRING_NEXT"])" />
+                                <BSumbit SetFocus="true" IsProcessing="context" Text="@GsoRep["IDS_STRING_NEXT"]" />
                             }
                             else
                             {
-                                @if (IsIndividualMode == true)
+                                @if (IsReadOnly == false)
                                 {
-                                    <BSumbit SetFocus="true" IsProcessing="context" Text="@GsoRep["IDS_STRING_NEXT"]" />
+                                    <BSumbit SetFocus="true" IsProcessing="context" Text="@GsoRep["IDS_STRING_SAVE"]" />
                                 }
                                 else
                                 {
+                                    <BDark Text="@GsoRep["IDS_STRING_SAVE"]" IsDisabled="@(true)" />
+                                }
+                            }
+                        }
+                        else
+                        {
+                            @if (IsIndividualMode == true)
+                            {
+                                <BSumbit SetFocus="true" IsProcessing="context" Text="@GsoRep["IDS_STRING_NEXT"]" />
+                            }
+                            else
+                            {
+                                @if (IsReadOnly == false)
+                                {
                                     <BSumbit SetFocus="true" IsProcessing="context" />
+                                }
+                                else
+                                {
+                                    <BDark Text="@GsoRep["IDS_STRING_SAVE"]" IsDisabled="@(true)" />
                                 }
                             }
                         }
                     </CheckP>
                     <BSecondary HotKey="@KeyCode.Escape" IsOutline="true" OnClick="Cancel" Text="@GsoRep["IDS_STRING_BACK"]" />
+                    <BClose OnClick="Close" />
                 </div>
             </ButtonModal>
         </BlazorLibrary.Shared.FormComponent.FormDefault>
     </BodyContent>
 </ModalDialog>
 
-<CheckP BitPosList="@(new[]{NameBitsPos.Create, NameBitsPos.CreateNoStandart})">
+<CheckP BitPosList="@(new[]{NameBitsPos.CreateSit, NameBitsPos.CreateNoStandart})">
     @if (ViewInfoMessage)
     {
         <CreateMessage TitleText="@GsoRep["IDS_REG_MESS_INSERT"]" CallBack="SaveCallBack" MsgId="GetCurrentMsgId" Edit="IsNewMessage" />
@@ -270,7 +279,7 @@
 
     @if (IsNext && SzsList != null)
     {
-        <ModalDialog Title="@UUZSRep["ZONE_NOTIFY"]" ButtonCloseEvent="()=>IsNext=false">
+        <ModalDialog Title="@UUZSRep["ZONE_NOTIFY"]" ButtonCloseEvent="Close">
             <BodyContent>
                 <TableDefault IsSetFocus="false" IsOnKeyDown="false" Colspan="16" Items="SzsList" IsSticky="false" MinWidth="0">
                     <Thead>
@@ -308,14 +317,15 @@
                 </TableDefault>
             </BodyContent>
             <ButtonContent>
-                <BSave OnClick="SaveSzs" />
-                <BCancel OnClick="()=>IsNext=false" />
+                <BSave OnClick="SaveSzs" IsDisabled="@(IsReadOnly==true)" />
+                <BSecondary HotKey="@KeyCode.Escape" IsOutline="true" OnClick="()=>IsNext=false" Text="@GsoRep["IDS_STRING_BACK"]" />
+                <BClose OnClick="Close" />
             </ButtonContent>
         </ModalDialog>
     }
     @if (WARNING_LENGTH_TIME_SIRENA == 1)
     {
-        <ModalDialog Title="@GsoRep["IDS_WARNING"]" ButtonCloseEvent="()=>WARNING_LENGTH_TIME_SIRENA=0">
+        <ModalDialog Title="@GSOFormRep["IDS_WARNING"]" ButtonCloseEvent="()=>WARNING_LENGTH_TIME_SIRENA=0">
             <BodyContent>
                 <p class="alert alert-warning">
                     @UUZSRep["WARNING_LENGTH_TIME_SIRENA"]

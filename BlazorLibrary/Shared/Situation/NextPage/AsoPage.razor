@@ -1,6 +1,6 @@
 ﻿@using SMDataServiceProto.V1;
 
-<ModalDialog Title="@AsoDataRep["IDS_STRING_MESSAGE_COMMENT"]" ButtonCloseEvent="Cancel">
+<ModalDialog Title="@AsoDataRep["IDS_STRING_MESSAGE_COMMENT"]" ButtonCloseEvent="Close">
     <BodyContent>
         <ResultView TItem="Objects" Items="Model?.Where(x => IsAllMsg ? true : x.OBJID?.SubsystemID == SubsystemType.SUBSYST_ASO)" Context="item" DbClick="Next" SelectList="@(SelectItem!=null ? new (){SelectItem}:null)" SetSelectList="(e)=>SelectItem=e?.FirstOrDefault()">
             <ChildContent>
@@ -10,22 +10,14 @@
     </BodyContent>
     <ButtonContent>
         <label class="form-check-label me-2">
-            <input class="form-check-input" checked="@IsAllMsg" type="checkbox" @onchange="@((e)=>SetAllView(e))"> @Rep["AllMessage"]
+            <input class="form-check-input" checked="@IsAllMsg" type="checkbox" disabled="@(IsReadOnly==true? "disabled": null)" @onchange="@((e)=>SetAllView(e))"> @Rep["AllMessage"]
         </label>
-        @if (!IsReadOnly)
-        {
-            <BDark HotKey="@KeyCode.Insert" OnClick="@(()=>{SelectItem=null; ViewInfoMessage=true; IsNewMessage=true;})" Text="@GsoRep["ID_RECORD"]" />
-        }
-        @if (SelectItem != null)
-        {
-            <BDark OnClick="@(()=>{ViewInfoMessage=true; IsNewMessage=false;})" Text="@AsoRep["ReadMessage"]" />
-        }
+        <BDark HotKey="@KeyCode.Insert" OnClick="@(()=>{SelectItem=null; ViewInfoMessage=true; IsNewMessage=true;})" Text="@GsoRep["ID_RECORD"]" IsDisabled="@(IsReadOnly)" />
+        <BDark OnClick="@(()=>{ViewInfoMessage=true; IsNewMessage=false;})" Text="@AsoRep["ReadMessage"]" IsDisabled="@(SelectItem==null)" />
         <div class="ms-auto">
-            @if (SelectItem != null && !IsReadOnly)
-            {
-                <BDark HotKey="@KeyCode.Enter" Text="@GsoRep["IDS_STRING_NEXT"]" OnClick="Next" />
-            }
+            <BSave OnClick="Next" IsDisabled="@(IsReadOnly || SelectItem == null)" />            
             <BSecondary HotKey="@KeyCode.Escape" IsOutline="true" OnClick="Cancel" Text="@GsoRep["IDS_STRING_BACK"]" />
+            <BClose OnClick="Close" />
         </div>
     </ButtonContent>
 </ModalDialog>

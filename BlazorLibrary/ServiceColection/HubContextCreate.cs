@@ -1,50 +1,23 @@
 ﻿using System.ComponentModel;
 using System.Reflection;
+using BlazorLibrary.Helpers;
 using Microsoft.AspNetCore.Components;
 using Microsoft.AspNetCore.SignalR.Client;
+using Microsoft.Extensions.Logging;
+using SharedLibrary.GlobalEnums;
 
 namespace BlazorLibrary.ServiceColection
 {
     public class HubContextCreate : IAsyncDisposable
     {
-        readonly Uri urlSignal;
-
         readonly HubConnection hubConnection;
 
-        readonly Dictionary<string, List<string>> handlerList = new();
-
-        public HubContextCreate(NavigationManager _NavigationManager)
+        readonly ILogger<HubContextCreate> _logger;
+        public HubContextCreate(NavigationManager _NavigationManager, HttpClient httpClient, ILogger<HubContextCreate> logger)
         {
-            urlSignal = _NavigationManager.ToAbsoluteUri("/CommunicationHub");
+            _logger = logger;
+            var urlSignal = _NavigationManager.ToAbsoluteUri($"/ExchangeHub?{nameof(CookieName.AppId)}={httpClient.DefaultRequestHeaders.GetHeader(nameof(CookieName.AppId))}");
             hubConnection = new HubConnectionBuilder().WithUrl(urlSignal).WithAutomaticReconnect(new RRetryPolicy()).Build();
-        }
-
-        public HubContextCreate(NavigationManager _NavigationManager, string urlHub)
-        {
-            urlSignal = _NavigationManager.ToAbsoluteUri($"/{urlHub}");
-            hubConnection = new HubConnectionBuilder().WithUrl(urlSignal).WithAutomaticReconnect().Build();
-        }
-
-        public HubContextCreate(NavigationManager _NavigationManager, string urlHub, KeyValuePair<string, string> header)
-        {
-            urlSignal = _NavigationManager.ToAbsoluteUri($"/{urlHub}");
-            hubConnection = new HubConnectionBuilder().WithUrl(urlSignal,
-                options => options.Transports = Microsoft.AspNetCore.Http.Connections.HttpTransportType.None).WithAutomaticReconnect().Build();
-        }
-
-        public HubContextCreate(NavigationManager _NavigationManager, string urlHub, Dictionary<string, string> headers)
-        {
-            urlSignal = _NavigationManager.ToAbsoluteUri($"/{urlHub}");
-            hubConnection = new HubConnectionBuilder().WithUrl(urlSignal, options =>
-            {
-                options.Headers = (IDictionary<string, string>)options.Headers.Concat(headers);
-            }).WithAutomaticReconnect().Build();
-        }
-
-        public async Task InitAsync(CancellationToken token = default)
-        {
-            if (hubConnection.State != HubConnectionState.Connected)
-                await hubConnection.StartAsync(token);
         }
 
         public Task<System.Threading.Channels.ChannelReader<TResult>> StreamAsChannelCoreAsync<TResult>(string methodName, object?[] args, CancellationToken cancellationToken = default)
@@ -101,67 +74,12 @@ namespace BlazorLibrary.ServiceColection
 
             return hubConnection.InvokeCoreAsync<TResult>(methodName, args, cancellationToken);
         }
-
-        public async Task SubscribeAsync(object? Pages)
+                
+        public async Task SubscribeAndStartAsync<TData>(TData pages, Type interfaceType)
         {
-            if (Pages == null)
+            if (pages == null)
                 return;
-
-            var ParamMethod = Pages.GetType().GetMethods().Where(x => x.GetCustomAttributes<DescriptionAttribute>().Any()).Select(x => new { method = x, name = x.Name, param = x.GetParameters().Select(p => p.ParameterType).ToArray() }).ToList();
-
-            if (ParamMethod?.Any() ?? false)
-            {
-                var pageName = Pages.GetType().Name;
-
-                foreach (var hubAction in ParamMethod)
-                {
-                    if (handlerList.ContainsKey(pageName) && handlerList[pageName].Contains(hubAction.name))
-                    {
-                        continue;
-                    }
-
-                    if (!handlerList.ContainsKey(pageName))
-                    {
-                        handlerList.Add(pageName, new());
-                    }
-
-                    if (!string.IsNullOrEmpty(hubAction.name))
-                    {
-                        handlerList[pageName].Add(hubAction.name);
-                        if (hubAction.param?.Any() ?? false)
-                        {
-                            hubConnection.On(hubAction.name, hubAction.param, (Value) =>
-                            {
-                                try
-                                {
-                                    hubAction.method.Invoke(Pages, Value);
-                                }
-                                catch (Exception ex)
-                                {
-                                    Console.WriteLine(ex.Message);
-                                }
-
-                                return Task.CompletedTask;
-                            });
-                        }
-                        else
-                        {
-                            hubConnection.On(hubAction.name, () =>
-                            {
-                                try
-                                {
-                                    hubAction.method.Invoke(Pages, null);
-                                }
-                                catch (Exception ex)
-                                {
-                                    Console.WriteLine(ex.Message);
-                                }
-                                return Task.CompletedTask;
-                            });
-                        }
-                    }
-                }
-            }
+            hubConnection.SubscribeViaInterface(pages, interfaceType);
             await StartConnect();
         }
 
@@ -175,14 +93,13 @@ namespace BlazorLibrary.ServiceColection
         {
             hubConnection.Reconnected += func;
         }
-               
+
         public HubConnectionState GetState
         {
             get
             {
                 return hubConnection.State;
             }
-
         }
 
         public async ValueTask DisposeAsync()

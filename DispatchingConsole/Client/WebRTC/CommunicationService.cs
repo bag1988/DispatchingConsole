@@ -1,9 +1,6 @@
-﻿using System;
-using System.ComponentModel;
-using System.Numerics;
-using System.Reflection;
+﻿using System.ComponentModel;
+using BlazorLibrary.Helpers;
 using BlazorLibrary.Models;
-using BlazorLibrary.Shared.Buttons;
 using FiltersGSOProto.V1;
 using Google.Protobuf;
 using Google.Protobuf.WellKnownTypes;
@@ -11,6 +8,7 @@ using Microsoft.AspNetCore.Components;
 using Microsoft.AspNetCore.SignalR.Client;
 using Microsoft.JSInterop;
 using SensorM.GsoCore.SharedLibrary;
+using SensorM.GsoCore.SharedLibrary.Interfaces;
 using SharedLibrary;
 using SharedLibrary.Extensions;
 using SharedLibrary.GlobalEnums;
@@ -19,7 +17,7 @@ using SharedLibrary.Utilities;
 
 namespace DispatchingConsole.Client.WebRTC
 {
-    public class CommunicationService : IAsyncDisposable
+    public class CommunicationService : IChatHub, IAsyncDisposable
     {
         private IJSObjectReference? _jsModuleRtc;
 
@@ -29,25 +27,14 @@ namespace DispatchingConsole.Client.WebRTC
             {
                 return _SelectConnect;
             }
-            set
-            {
-                if (!value?.Equals(_SelectConnect) ?? true)
-                {
-                    ResetChatMessage();
-                    if (value != null)
-                    {
-                        _ = LoadMessageForChat(value.Key);
-                        _ = SendCoreHubAsync("RemoveNoReadMessage", [value.Key]);
-                    }
-                    _SelectConnect = value;
-                }
-            }
         }
 
         int SkipData = 0;
         int TakeData = 0;
         int AllCount = 0;
         ChatInfo? _SelectConnect { get; set; }
+
+        public bool LoadChangeSelectValue = true;
 
         ViewPodsMessageFiltr FiltrModel = new();
 
@@ -60,7 +47,7 @@ namespace DispatchingConsole.Client.WebRTC
         public string[] _imgExt = [".png", ".gif", ".jpeg", ".svg"];
         public List<ChatInfo> ConnectList { get; set; } = new();
 
-        public bool LoadConnectList = false;
+        public bool LoadConnectList = true;
         public bool IsEditItemsConnect { get; set; } = false;
         public bool isDeleteChatRoom = false;
         private DotNetObjectReference<CommunicationService>? _jsThis { get; set; }
@@ -104,38 +91,20 @@ namespace DispatchingConsole.Client.WebRTC
             _logger = logger;
         }
 
-        public void SubscribeAsync()
-        {
-            _myHub.On<Guid, ChatMessage>("AddMessageForChat", AddMessageForChat);
-            _myHub.On<ChatInfo>("SetInCallingConnect", SetInCallingConnect);
-            _myHub.On<ChatInfo>("UpdateChatRoom", UpdateChatRoom);
-            _myHub.On<IEnumerable<ContactInfo>?>("AddOrUpdateContactList", AddOrUpdateContactList);
-            _myHub.On<ContactInfo>("AddOrUpdateContact", AddOrUpdateContact);
-            _myHub.On<string, string, DateTime>("UpdateListActiveContact", UpdateListActiveContact);
-            _myHub.On<string?>(nameof(DaprMessage.Fire_ShowPushNotify), Fire_ShowPushNotify);
-            _myHub.On<string, string>("DeleteContactNotify", DeleteContactNotify);
-            _myHub.On<Guid>("DeleteChatForKey", DeleteChatForKey);
-            _myHub.On<Guid>("AddNoReadMessage", AddNoReadMessage);
-            _myHub.On<Guid>("RemoveNoReadMessage", RemoveNoReadMessage);
-            _myHub.On<string, string, Guid>("GoConnectionP2P", GoConnectionP2P);
-            _myHub.On<string, string, Guid, string>("SetRemoteOfferForUrl", SetRemoteOfferForUrl);
-            _myHub.On<string, string, Guid, string>("SetChangeRemoteOfferForUrl", SetChangeRemoteOfferForUrl);
-            _myHub.On<string, string, Guid, string>("SetRemoteAnswerForUrl", SetRemoteAnswerForUrl);
-            _myHub.On<string, string, Guid, string>("SendCandidate", SendCandidate);
-            _myHub.On<string, string, Guid>("CloseP2P", CloseP2P);
-        }
-
         public async Task OnInitializedCommunicationAsync(string localIdPlayer, string remoteIdPlayerArray)
         {
             try
             {
+                LoadConnectList = true;
+                LoadChangeSelectValue = true;
+                CallBackUpdateView?.Invoke();
                 _jsModuleRtc = await JSRun.InvokeAsync<IJSObjectReference>("import", $"./js/CommunicationService.js?v={AssemblyNames.GetVersionPKO}");
                 _observer = await JSRun.InvokeAsync<IJSObjectReference>("import", $"./js/CreateObserver.js?v={AssemblyNames.GetVersionPKO}");
                 _push = await JSRun.InvokeAsync<IJSObjectReference>("import", $"./js/push.js?v={AssemblyNames.GetVersionPKO}");
                 _jsThis = DotNetObjectReference.Create(this);
 
                 _ = _jsModuleRtc.InvokeVoidAsync("initialize", _jsThis, localIdPlayer, remoteIdPlayerArray);
-                await _observer.InvokeVoidAsync("CreateObserver.init", _jsThis, nameof(LoadMessageForChat));
+                await _observer.InvokeVoidAsync("CreateObserver.init", _jsThis, nameof(CallBackObserver));
             }
             catch (Exception ex)
             {
@@ -143,13 +112,42 @@ namespace DispatchingConsole.Client.WebRTC
             }
         }
 
-        void ResetChatMessage()
+        public async Task SetSelectValue(ChatInfo? value)
+        {
+            LoadChangeSelectValue = true;
+            try
+            {
+                if (!value?.Equals(_SelectConnect) ?? true)
+                {
+                    _SelectConnect = value;
+                    await ResetChatMessage();
+                    CallBackUpdateView?.Invoke();
+                    if (value != null)
+                    {
+                        await InitMessageForChat(value.Key);
+                        await SendCoreHubAsync("RemoveNoReadMessage", [value.Key]);
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError("Ошибка установки активного чата: {message}", ex.Message);
+            }
+            LoadChangeSelectValue = false;
+        }
+
+
+        async Task ResetChatMessage()
         {
             CurrentChatMessages = null;
             SkipData = 0;
             TakeData = 100;
             AllCount = 0;
-            _ = _observer?.InvokeVoidAsync("CreateObserver.stopObserver");
+            if (_observer != null)
+            {
+                await _observer.InvokeVoidAsync("CreateObserver.stopObserver");
+            }
+
         }
 
         /// <summary>
@@ -160,6 +158,7 @@ namespace DispatchingConsole.Client.WebRTC
         {
             try
             {
+                LoadConnectList = true;
                 ConnectList = new();
 
                 _appId = appId;
@@ -170,20 +169,17 @@ namespace DispatchingConsole.Client.WebRTC
                 }
                 var absoluteUri = MyNavigationManager.ToAbsoluteUri($"/CommunicationChatHub?{nameof(CookieName.AppId)}={appId}");
                 _myHub = new HubConnectionBuilder().WithUrl(absoluteUri).WithAutomaticReconnect().Build();
-                SubscribeAsync();
+                _myHub.SubscribeViaInterface(this, typeof(IChatHub));
 
                 if (_myHub.State != HubConnectionState.Connected)
                 {
                     await _myHub.StartAsync();
                 }
-
-                LoadConnectList = true;
                 var newData = await InvokeCoreHubAsync<List<ChatInfo>?>("GetConnectionList", Array.Empty<object>());
                 if (newData?.Count > 0)
                 {
                     ConnectList.AddRange(newData.ExceptBy(ConnectList.Select(x => x.Key), (x) => x.Key));
                 }
-                LoadConnectList = false;
 
                 var allContactList = await InvokeCoreHubAsync<List<ContactInfo>?>("GetAllContactForUser", Array.Empty<object>());
                 if (allContactList?.Count > 0)
@@ -194,6 +190,13 @@ namespace DispatchingConsole.Client.WebRTC
                 NoReadMessages = await InvokeCoreHubAsync<Dictionary<Guid, int>?>("GetCountNoReadMessages", Array.Empty<object>()) ?? new();
 
                 MyAuthorityUrl = await InvokeCoreHubAsync<string?>("GetLocalAuthorityUrl", Array.Empty<object>()) ?? MyNavigationManager.BaseUri;
+
+                LoadConnectList = false;
+                LoadChangeSelectValue = false;
+                if (_SelectConnect == null && ConnectList.Count > 0)
+                {
+                    await SetSelectValue(ConnectList.FirstOrDefault());
+                }
 
             }
             catch (Exception ex)
@@ -242,7 +245,6 @@ namespace DispatchingConsole.Client.WebRTC
         {
             try
             {
-                _logger.LogTrace("Получено уведомление {json}", json);
                 if (!string.IsNullOrEmpty(json) && _push != null)
                 {
                     await _push.InvokeVoidAsync("SendPush", json);
@@ -288,26 +290,29 @@ namespace DispatchingConsole.Client.WebRTC
                     lock (ContactList)
                     {
                         List<ContactInfo>? newData = null;
-                        IEnumerable<ContactInfo>? updateData = null;
-                        IEnumerable<ContactInfo>? deleteData = null;
+                        List<ContactInfo>? updateData = null;
+                        List<ContactInfo>? deleteData = null;
                         if (list.First().Type == TypeContact.Local)
                         {
-                            deleteData = ContactList.Where(x => x.Type == TypeContact.Local).ToList().ExceptBy(list.Select(x => x.UserName), x => x.UserName);
+                            deleteData = ContactList.Where(x => x.Type == TypeContact.Local).ToList().ExceptBy(list.Select(x => $"{x.AuthorityUrl}&{x.UserName}"), x => $"{x.AuthorityUrl}&{x.UserName}").ToList();
 
-                            newData = list.ExceptBy(ContactList.Where(x => x.Type == TypeContact.Local).Select(x => x.UserName), x => x.UserName).ToList();
+                            newData = list.ExceptBy(ContactList.Where(x => x.Type == TypeContact.Local).Select(x => $"{x.AuthorityUrl}&{x.UserName}"), x => $"{x.AuthorityUrl}&{x.UserName}").ToList();
 
-                            updateData = ContactList.Where(x => x.Type == TypeContact.Local).IntersectBy(list.Select(x => x.UserName), x => x.UserName);
+                            updateData = ContactList.Where(x => x.Type == TypeContact.Local).IntersectBy(list.Select(x => $"{x.AuthorityUrl}&{x.UserName}"), x => $"{x.AuthorityUrl}&{x.UserName}").ToList();
                         }
                         else
                         {
-                            deleteData = ContactList.Where(x => x.Type != TypeContact.Local && list.Any(l => l.AuthorityUrl == x.AuthorityUrl)).ToList().ExceptBy(list.Select(x => $"{x.AuthorityUrl}&{x.UserName}"), x => $"{x.AuthorityUrl}&{x.UserName}");
+                            deleteData = ContactList.Where(x => x.Type != TypeContact.Local && list.Any(l => l.AuthorityUrl == x.AuthorityUrl)).ToList().ExceptBy(list.Select(x => $"{x.AuthorityUrl}&{x.UserName}"), x => $"{x.AuthorityUrl}&{x.UserName}").ToList();
+
                             newData = list.ExceptBy(ContactList.Where(x => x.Type != TypeContact.Local).Select(x => $"{x.AuthorityUrl}&{x.UserName}"), x => $"{x.AuthorityUrl}&{x.UserName}").ToList();
 
-                            updateData = ContactList.Where(x => x.Type != TypeContact.Local).IntersectBy(list.Select(x => $"{x.AuthorityUrl}&{x.UserName}"), x => $"{x.AuthorityUrl}&{x.UserName}");
+                            updateData = ContactList.Where(x => x.Type != TypeContact.Local).IntersectBy(list.Select(x => $"{x.AuthorityUrl}&{x.UserName}"), x => $"{x.AuthorityUrl}&{x.UserName}").ToList();
                         }
+
 
                         if (deleteData.Any())
                         {
+                            _logger.LogTrace("Удаление {count} контактов ({type})", deleteData.Count, list.First().Type);
                             ContactList.RemoveAll(x => deleteData.Contains(x));
 
                             if (deleteData.Any(x => x.UserName == UserName && IsMyAuthorityUrl(x.AuthorityUrl)))
@@ -319,6 +324,7 @@ namespace DispatchingConsole.Client.WebRTC
 
                         if (newData?.Count > 0)
                         {
+                            _logger.LogTrace("Добавление {count} контактов ({type})", newData.Count, list.First().Type);
                             ContactList.AddRange(newData);
                             if (newData.First().Type == TypeContact.Local)
                             {
@@ -327,13 +333,15 @@ namespace DispatchingConsole.Client.WebRTC
                         }
                         if (updateData?.Any() ?? false)
                         {
+                            _logger.LogTrace("Обновление {count} контактов ({type})", updateData.Count, list.First().Type);
                             foreach (var item in updateData)
                             {
                                 var first = list.FirstOrDefault(x => x.AuthorityUrl == item.AuthorityUrl && x.UserName == item.UserName);
                                 if (first != null)
                                 {
-                                    var forUpdate = ContactList.FirstOrDefault(x => x.AuthorityUrl == item.AuthorityUrl && x.UserName == item.UserName);
-                                    forUpdate = new(first.Name, first.AuthorityUrl, first.UserName, first.StaffId, first.LastActive);
+                                    var indexElem = ContactList.IndexOf(item);
+                                    ContactList.Remove(item);
+                                    ContactList.Insert(indexElem, first);
                                 }
                             }
                         }
@@ -342,6 +350,7 @@ namespace DispatchingConsole.Client.WebRTC
                     if (isUpdateChatRoom)
                     {
                         var newData = await InvokeCoreHubAsync<List<ChatInfo>?>("GetConnectionList", Array.Empty<object>());
+                        _logger.LogTrace("Получили список комнат ({count}) для новых контактов", newData?.Count);
                         if (newData?.Count > 0)
                         {
                             ConnectList.AddRange(newData.ExceptBy(ConnectList.Select(x => x.Key), (x) => x.Key));
@@ -395,8 +404,7 @@ namespace DispatchingConsole.Client.WebRTC
             {
                 if (SelectConnect?.Key == keyChatRoom)
                 {
-                    if (CurrentChatMessages == null)
-                        CurrentChatMessages = new();
+                    CurrentChatMessages ??= new();
                     CurrentChatMessages.Add(message);
                     AllCount++;
                     await SendCoreHubAsync("RemoveNoReadMessage", [keyChatRoom]);
@@ -416,11 +424,12 @@ namespace DispatchingConsole.Client.WebRTC
             {
                 _logger.LogError(ex.Message);
             }
+
             CallBackUpdateView?.Invoke();
 
             if (SelectConnect?.Key == keyChatRoom)
             {
-                _ = ScrollToElement(true);
+                await ScrollToElement(true);
                 if (!string.IsNullOrEmpty(message.Url) && _audioExt.Contains(Path.GetExtension(message.Url).ToLower()))
                 {
                     await Task.Yield();
@@ -470,14 +479,14 @@ namespace DispatchingConsole.Client.WebRTC
         }
 
         [Description(DaprMessage.PubSubName)]
-        public Task DeleteChatForKey(Guid keyChatRoom)
+        public async Task DeleteChatForKey(Guid keyChatRoom)
         {
             try
             {
 
                 if (SelectConnect?.Key == keyChatRoom)
                 {
-                    SelectConnect = null;
+                    await SetSelectValue(null);
                     IsEditItemsConnect = false;
                     isDeleteChatRoom = false;
                 }
@@ -488,7 +497,6 @@ namespace DispatchingConsole.Client.WebRTC
                 _logger.LogError(ex.Message);
             }
             CallBackUpdateView?.Invoke();
-            return Task.CompletedTask;
 
         }
 
@@ -523,7 +531,6 @@ namespace DispatchingConsole.Client.WebRTC
         {
             try
             {
-
                 var conn = ConnectList.FirstOrDefault(y => y.Key == keyChatRoom);
 
                 if (conn != null)
@@ -535,7 +542,7 @@ namespace DispatchingConsole.Client.WebRTC
                         var offer = await _jsModuleRtc.InvokeAsync<string?>("callAction", IpAddressUtilities.GetAuthority(forUrl), forUserName, keyChatRoom, conn.OutTypeConn == TypeConnect.Video);
                         if (!string.IsNullOrEmpty(offer))
                         {
-                            await SendCoreHubAsync("SendOfferForClient", new object[] { forUrl, forUserName, keyChatRoom, offer ?? string.Empty });
+                            await SendCoreHubAsync("SendOfferForClient", [forUrl, forUserName, keyChatRoom, offer ?? string.Empty]);
                         }
                         else
                         {
@@ -548,7 +555,6 @@ namespace DispatchingConsole.Client.WebRTC
             {
                 _logger.LogError(ex.Message);
             }
-
         }
 
         [Description(DaprMessage.PubSubName)]
@@ -567,7 +573,7 @@ namespace DispatchingConsole.Client.WebRTC
                         var answer = await _jsModuleRtc.InvokeAsync<string?>("processOffer", IpAddressUtilities.GetAuthority(forUrl), forUser, keyChatRoom, offer, conn.OutTypeConn == TypeConnect.Video);
                         if (!string.IsNullOrEmpty(answer))
                         {
-                            await SendCoreHubAsync("SendAnswerForRemoteClient", new object[] { forUrl, forUser, keyChatRoom, answer ?? string.Empty });
+                            await SendCoreHubAsync("SendAnswerForRemoteClient", [forUrl, forUser, keyChatRoom, answer ?? string.Empty]);
                         }
                         else
                         {
@@ -598,7 +604,7 @@ namespace DispatchingConsole.Client.WebRTC
                         var answer = await _jsModuleRtc.InvokeAsync<string?>("StartAnswerForChangeStream", IpAddressUtilities.GetAuthority(forUrl), forUser, keyChatRoom, offer);
                         if (!string.IsNullOrEmpty(answer))
                         {
-                            await SendCoreHubAsync("SendAnswerForRemoteClient", new object[] { forUrl, forUser, keyChatRoom, answer ?? string.Empty });
+                            await SendCoreHubAsync("SendAnswerForRemoteClient", [forUrl, forUser, keyChatRoom, answer ?? string.Empty]);
                         }
                         else
                         {
@@ -674,15 +680,15 @@ namespace DispatchingConsole.Client.WebRTC
         }
 
         [Description(DaprMessage.PubSubName)]
-        public Task RemoveNoReadMessage(Guid keyChatRoom)
+        public Task RemoveNoReadMessage(Guid? keyChatRoom)
         {
             try
             {
                 lock (NoReadMessages)
                 {
-                    if (NoReadMessages.ContainsKey(keyChatRoom))
+                    if (keyChatRoom != null && NoReadMessages.ContainsKey(keyChatRoom.Value))
                     {
-                        NoReadMessages.Remove(keyChatRoom);
+                        NoReadMessages.Remove(keyChatRoom.Value);
                         CallBackUpdateView?.Invoke();
                     }
                 }
@@ -738,7 +744,7 @@ namespace DispatchingConsole.Client.WebRTC
                 var conn = ConnectList?.FirstOrDefault(x => x.Key == keyChatRoom && x.Items.Any(i => i.UserName == forUser && IpAddressUtilities.CompareForAuthority(i.AuthorityUrl, forUrl)));
                 if (conn != null)
                 {
-                    await SendCoreHubAsync("SendCandidateForUrl", new object[] { forUrl, forUser, keyChatRoom, candidate });
+                    await SendCoreHubAsync("SendCandidateForUrl", [forUrl, forUser, keyChatRoom, candidate]);
                 }
             }
             catch (Exception ex)
@@ -766,7 +772,7 @@ namespace DispatchingConsole.Client.WebRTC
         {
             try
             {
-                await SendCoreHubAsync("ConnectedP2P", new object[] { forUrl, forUser, keyChatRoom });
+                await SendCoreHubAsync("ConnectedP2P", [forUrl, forUser, keyChatRoom]);
             }
             catch (Exception ex)
             {
@@ -781,36 +787,18 @@ namespace DispatchingConsole.Client.WebRTC
                 await Task.Yield();
                 if (isCheckScroll == true)
                 {
-                    await using var parent = await JSRun.InvokeAsync<IJSObjectReference>("document.querySelector", ".table-scroll-v");
+                    var tBounding = await JSRun.InvokeAsync<BoundingClientRect?>("GetBoundingClientRectForQuery", ".pods-message-view");
 
-                    if (parent != null)
+                    var lBounding = await JSRun.InvokeAsync<BoundingClientRect?>("GetBoundingClientRectForQuery", ".message-container:last-child");
+
+                    if (lBounding?.top > tBounding?.bottom)
                     {
-                        var tBounding = await parent.InvokeAsync<BoundingClientRect?>("getBoundingClientRect");
-
-                        await using var lastChild = await parent.InvokeAsync<IJSObjectReference>("querySelector", ".message-container:last-child");
-
-                        if (lastChild != null)
-                        {
-                            var lBounding = await lastChild.InvokeAsync<BoundingClientRect?>("getBoundingClientRect");
-
-                            if (lBounding?.top > tBounding?.bottom)
-                            {
-                                return;
-                            }
-
-                            await lastChild.DisposeAsync();
-                        }
-                        await parent.DisposeAsync();
+                        //return;
                     }
                 }
                 if (CurrentChatMessages?.Count > 0)
                 {
-                    var div = await JSRun.InvokeAsync<IJSObjectReference?>("document.querySelector", "div.message-container:last-of-type");
-                    if (div != null)
-                    {
-                        await div.InvokeVoidAsync("scrollIntoView", "{ behavior: \"smooth\" }");
-                        await div.DisposeAsync();
-                    }
+                    await JSRun.InvokeVoidAsync("ScrollToSelectElementQuery", ".message-container:last-child");
                 }
             }
             catch (Exception ex)
@@ -825,12 +813,7 @@ namespace DispatchingConsole.Client.WebRTC
                 if (_observer != null && AllCount > CurrentChatMessages?.Count)
                 {
                     await Task.Delay(1000);
-                    var div = await JSRun.InvokeAsync<IJSObjectReference?>("document.querySelector", $"div.message-container:first-of-type");
-                    if (div != null)
-                    {
-                        await _observer.InvokeVoidAsync("CreateObserver.startObserver", div, SelectConnect?.Key);
-                        await div.DisposeAsync();
-                    }
+                    await _observer.InvokeVoidAsync("CreateObserver.startObserver", ".message-container", SelectConnect?.Key);
                 }
             }
             catch (Exception ex)
@@ -843,12 +826,12 @@ namespace DispatchingConsole.Client.WebRTC
         {
             try
             {
-                var name = Path.GetFileName(fileName.Replace(@"\", "/"));
-                var player = await JSRun.InvokeAsync<IJSObjectReference?>("document.querySelector", $":is(audio:has(source[src$='{name}']), video:has(source[src$='{name}']))");
-                if (player != null)
+                if (_SelectConnect != null)
                 {
-                    await player.InvokeVoidAsync("load");
-                    await player.DisposeAsync();
+                    var name = Path.GetFileName(fileName.Replace(@"\", "/"));
+                    var player = await JSRun.InvokeAsync<IJSObjectReference?>("document.querySelector", $":is(audio:has(source[src$='{name}']), video:has(source[src$='{name}']))");
+                    player?.InvokeVoidAsync("load");
+                    player?.DisposeAsync();
                 }
             }
             catch (Exception ex)
@@ -963,7 +946,7 @@ namespace DispatchingConsole.Client.WebRTC
         {
             try
             {
-                await SendCoreHubAsync("StartChatRoom", new object[] { keyChatRoom, typeConnect });
+                await SendCoreHubAsync("StartChatRoom", [keyChatRoom, typeConnect]);
             }
             catch (Exception ex)
             {
@@ -988,7 +971,7 @@ namespace DispatchingConsole.Client.WebRTC
             try
             {
                 await SendCoreHubAsync("ReadyCreateP2P", new object[] { keyChatRoom, typeConnect });
-                SelectConnect = ConnectList.FirstOrDefault(x => x.Key == keyChatRoom);
+                await SetSelectValue(ConnectList.FirstOrDefault(x => x.Key == keyChatRoom));
                 CallBackUpdateView?.Invoke();
             }
             catch (Exception ex)
@@ -1019,14 +1002,26 @@ namespace DispatchingConsole.Client.WebRTC
         }
 
         [JSInvokable]
-        public async Task LoadMessageForChat(Guid? keyChatRoom)
+        public async Task CallBackObserver(Guid? keyChatRoom)
+        {
+            try
+            {
+                await LoadMessageForChat(keyChatRoom);
+                await SetObjObserver();
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex.Message);
+            }
+        }
+
+        async Task LoadMessageForChat(Guid? keyChatRoom)
         {
             try
             {
                 var newData = await InvokeCoreHubAsync<MessagesAndAllCount?>("GetMessageForChat", [keyChatRoom, SkipData, TakeData, Any.Pack(FiltrModel).ToByteArray()]);
 
-                if (CurrentChatMessages == null)
-                    CurrentChatMessages = new();
+                CurrentChatMessages ??= new();
 
                 if (newData != null)
                 {
@@ -1043,22 +1038,41 @@ namespace DispatchingConsole.Client.WebRTC
                     }
                     AllCount = newData.AllCount;
                 }
+                LoadChangeSelectValue = false;
                 CallBackUpdateView?.Invoke();
-
             }
             catch (Exception ex)
             {
-                Console.Write(ex.Message);
+                _logger.LogError(ex.Message);
             }
         }
 
-        public void SetFiltrModel(ViewPodsMessageFiltr filtr)
+        async Task InitMessageForChat(Guid? keyChatRoom)
+        {
+            try
+            {
+                if (keyChatRoom != null)
+                {
+                    await LoadMessageForChat(keyChatRoom);
+
+                    await ScrollToElement();
+
+                    await SetObjObserver();
+                }
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError("Error {name}, {message}", nameof(InitMessageForChat), ex.Message);
+            }
+        }
+
+        public async Task SetFiltrModel(ViewPodsMessageFiltr filtr)
         {
             FiltrModel = filtr;
-            ResetChatMessage();
+            await ResetChatMessage();
             if (SelectConnect != null)
             {
-                _ = LoadMessageForChat(SelectConnect.Key);
+                await InitMessageForChat(SelectConnect.Key);
             }
         }
 
@@ -1105,7 +1119,7 @@ namespace DispatchingConsole.Client.WebRTC
                             var newOffer = await _jsModuleRtc.InvokeAsync<string?>("StartOfferForChangeStream", IpAddressUtilities.GetAuthority(forUrl.AuthorityUrl), forUrl.UserName, conn.Key);
                             if (!string.IsNullOrEmpty(newOffer))
                             {
-                                await SendCoreHubAsync("SendChangeRemoteStream", new object?[] { forUrl.AuthorityUrl, forUrl.UserName, conn.Key, newOffer, typeOutCall });
+                                await SendCoreHubAsync("SendChangeRemoteStream", [forUrl.AuthorityUrl, forUrl.UserName, conn.Key, newOffer, typeOutCall]);
                             }
                         }
                     }
@@ -1181,7 +1195,7 @@ namespace DispatchingConsole.Client.WebRTC
                 var conn = ConnectList?.FirstOrDefault(x => x.Key == keyChatRoom);
                 if (conn != null)
                 {
-                    await SendCoreHubAsync("CloseCallAction", new object[] { keyChatRoom });
+                    await SendCoreHubAsync("CloseCallAction", [keyChatRoom]);
                     //Закрываем все P2P
                     foreach (var forUrl in conn.Items)
                     {
@@ -1255,7 +1269,6 @@ namespace DispatchingConsole.Client.WebRTC
             yield break;
         }
 
-
         [JSInvokable]
         public async Task StopStreamToFile(string fileName)
         {
@@ -1305,6 +1318,7 @@ namespace DispatchingConsole.Client.WebRTC
 
         public async ValueTask CloseAllConnect()
         {
+            _logger.LogTrace("Закрываем все открытые подключения {count}", ConnectList.Count(x => GetStateCalling(x) >= StateCall.Calling));
             foreach (var conn in ConnectList.Where(x => GetStateCalling(x) >= StateCall.Calling))
             {
                 await CloseCallAction(conn.Key);
@@ -1314,26 +1328,30 @@ namespace DispatchingConsole.Client.WebRTC
         public async ValueTask DisposeIndexPage()
         {
             NoReadMessages.Clear();
-            _SelectConnect = null;
+            await SetSelectValue(null);
+            await CloseAllConnect();
             ConnectList.Clear();
             ContactList.Clear();
-            await CloseAllConnect();
             await _myHub.StopAsync();
+        }
+
+        public async ValueTask DisposeModuleRtc()
+        {
+            if (_jsModuleRtc != null)
+            {
+                await _jsModuleRtc.InvokeVoidAsync("StopLocalStream");
+                await _jsModuleRtc.DisposeAsync();
+            }
         }
 
         public async ValueTask DisposeAsync()
         {
             await CloseAllConnect();
-            if (_jsModuleRtc != null)
-                await _jsModuleRtc.DisposeAsync();
-            if (_jsThis != null)
-                await _jsThis.DisposeAsync();
-            if (playerCaller != null)
-                await playerCaller.DisposeAsync();
-            if (_observer != null)
-                await _observer.DisposeAsync();
-            if (_push != null)
-                await _push.DisposeAsync();
+            await DisposeModuleRtc();
+            _jsThis?.DisposeAsync();
+            playerCaller?.DisposeAsync();
+            _observer?.DisposeAsync();
+            _push?.DisposeAsync();
             await _myHub.DisposeAsync();
         }
 

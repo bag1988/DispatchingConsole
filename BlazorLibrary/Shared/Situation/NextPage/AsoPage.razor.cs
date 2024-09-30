@@ -13,6 +13,9 @@ namespace BlazorLibrary.Shared.Situation.NextPage
         public EventCallback<OBJ_ID> NextAction { get; set; }
 
         [Parameter]
+        public EventCallback CloseAllAction { get; set; }
+
+        [Parameter]
         public int? MsgID { get; set; }
 
         [Parameter]
@@ -34,7 +37,7 @@ namespace BlazorLibrary.Shared.Situation.NextPage
             StaffId = await _User.GetLocalStaff();
             await GetList();
 
-            _ = _HubContext.SubscribeAsync(this);
+            _ = _HubContext.SubscribeAndStartAsync(this, typeof(IPubSubMethod));
         }
         [Description(DaprMessage.PubSubName)]
         public async Task Fire_InsertDeleteMessage(ulong Value)
@@ -86,7 +89,7 @@ namespace BlazorLibrary.Shared.Situation.NextPage
                 {
                     SelectItem = Model.FirstOrDefault(m => m.OBJID.ObjID == MsgID);
 
-                    if(SelectItem != null)
+                    if (SelectItem != null)
                     {
                         IsAllMsg = SelectItem.OBJID?.SubsystemID != SubsystemType.SUBSYST_ASO;
                     }
@@ -111,13 +114,25 @@ namespace BlazorLibrary.Shared.Situation.NextPage
                 return;
 
             if (NextAction.HasDelegate)
+            {
                 await NextAction.InvokeAsync(SelectItem.OBJID);
+            }
+        }
+
+        private async Task Close()
+        {
+            if (CloseAllAction.HasDelegate)
+            {
+                await CloseAllAction.InvokeAsync();
+            }
         }
 
         private async Task Cancel()
         {
             if (NextAction.HasDelegate)
+            {
                 await NextAction.InvokeAsync();
+            }
         }
         public ValueTask DisposeAsync()
         {

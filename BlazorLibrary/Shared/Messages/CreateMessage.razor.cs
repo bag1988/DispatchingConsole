@@ -7,6 +7,7 @@ using Google.Protobuf;
 using Microsoft.AspNetCore.Components;
 using SharedLibrary;
 using SharedLibrary.GlobalEnums;
+using SharedLibrary.Interfaces;
 using SMDataServiceProto.V1;
 using SyntezServiceProto.V1;
 using static BlazorLibrary.Shared.Main;
@@ -14,7 +15,7 @@ using static BlazorLibrary.Shared.Main;
 namespace BlazorLibrary.Shared.Messages
 {
 
-    partial class CreateMessage : IAsyncDisposable
+    partial class CreateMessage : IAsyncDisposable, IPubSubMethod
     {
         [Parameter]
         public int? MsgId { get; set; }
@@ -66,7 +67,7 @@ namespace BlazorLibrary.Shared.Messages
             StaffId = await _User.GetLocalStaff();
             await GetList();
             await GetSettingSynthesis();
-            _ = _HubContext.SubscribeAsync(this);
+            _ = _HubContext.SubscribeAndStartAsync(this, typeof(IPubSubMethod));
         }
         private async Task WriteMessages()
         {
@@ -257,7 +258,7 @@ namespace BlazorLibrary.Shared.Messages
             if (s == null)
                 return;
 
-            int CountBuffer = 24000;
+            int CountBuffer = 100_000;
 
             _fileLength = s.Length;
             channel = Channel.CreateBounded<byte[]>(5);
@@ -282,7 +283,7 @@ namespace BlazorLibrary.Shared.Messages
                     }
                 });
 
-                var result = await _HubContext.InvokeCoreAsync<bool>("UploadMessages", new object[] { channel.Reader, msgId, SaveFileOrBase });
+                var result = await _HubContext.InvokeCoreAsync<bool>("UploadMessages", [channel.Reader, msgId, SaveFileOrBase]);
 
                 if (!result)
                 {

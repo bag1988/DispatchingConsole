@@ -25,7 +25,7 @@ namespace BlazorLibrary.Models
     {
         public ChildItems(TItem key, Func<TItem, IEnumerable<ChildItems<TItem>>?>? getChild = null)
         {
-            Key = key;            
+            Key = key;
             GetChild = getChild;
             if (getChild != null)
                 IsContainsChild = true;
@@ -43,6 +43,32 @@ namespace BlazorLibrary.Models
                 }
                 return null;
             }
+        }
+    }
+
+    public class ChildItemsDynamic
+    {
+        public ChildItemsDynamic(object key, Func<object?, IEnumerable<ChildItemsDynamic>?>? getChild = null)
+        {
+            Key = key;
+            GetChild = getChild;
+            if (getChild != null)
+                IsContainsChild = true;
+        }
+        public object Key { get; init; }
+        public bool IsContainsChild { get; init; } = false;
+        readonly Func<object?, IEnumerable<ChildItemsDynamic>?>? GetChild;
+        public IEnumerable<ChildItemsDynamic>? Childs
+        {
+            get
+            {
+                if (Key != null && GetChild != null)
+                {
+                    return GetChild.Invoke(Key) ?? new List<ChildItemsDynamic>();
+                }
+                return null;
+            }
+
         }
     }
 }

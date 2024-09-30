@@ -1,7 +1,7 @@
 ﻿@using SMControlSysProto.V1;
 @using SharedLibrary.GlobalEnums
 
-<ModalDialog Title="@StaffRep["ListSitForNotify"]" ButtonCloseEvent="Cancel">
+<ModalDialog Title="@StaffRep["ListSitForNotify"]" ButtonCloseEvent="Close">
     <BodyContent>
         <BlazorLibrary.Shared.FormComponent.FormDefault OnSumbit="Next">
             @if (StaffList != null)
@@ -55,31 +55,37 @@
             }
             <ButtonModal>
                 <label class="form-check-label me-2">
-                    <input class="form-check-input" type="checkbox" checked="@IsAllMsg" @onchange="@((e)=>SetAllView(e))"> @Rep["AllMessage"]
+                    <input class="form-check-input" type="checkbox" checked="@IsAllMsg" disabled="@(IsReadOnly==true? "disabled": null)" @onchange="@((e)=>SetAllView(e))"> @Rep["AllMessage"]
                 </label>
-                @if (IsReadOnly == false)
-                {
-                    <BDark OnClick="@(()=>{ViewInfoMessage=true; IsNewMessage=true;})" Text="@GsoRep["ID_RECORD"]" />
-                }
+                <BDark OnClick="@(()=>{ViewInfoMessage=true; IsNewMessage=true;})" Text="@GsoRep["ID_RECORD"]" IsDisabled="@(IsReadOnly==true)" />
                 @if (SelectItem?.CustMsg != null && SelectItem.CustMsg.ObjID != 0)
                 {
                     <BDark OnClick="@(()=>{ViewInfoMessage=true; IsNewMessage=false;})" Text="@AsoRep["ReadMessage"]" />
                 }
+                else
+                {
+                    <BDark Text="@AsoRep["ReadMessage"]" IsDisabled="@(true)" />
+                }
                 <div class="ms-auto">
                     @if (IsReadOnly == false)
                     {
-                        <CheckP BitPosList="@(new[]{NameBitsPos.Create, NameBitsPos.CreateNoStandart})">
-                            <BSumbit SetFocus="true" Text="@GsoRep["IDS_STRING_NEXT"]" IsProcessing="context" />
+                        <CheckP BitPosList="@(new[]{NameBitsPos.CreateSit, NameBitsPos.CreateNoStandart})">
+                            <BSumbit SetFocus="true" Text="@GsoRep["IDS_STRING_SAVE"]" IsProcessing="context" />
                         </CheckP>
                     }
+                    else
+                    {
+                        <BDark Text="@GsoRep["IDS_STRING_SAVE"]" IsDisabled="@(true)" />
+                    }
                     <BSecondary HotKey="@KeyCode.Escape" IsOutline="true" OnClick="Cancel" Text="@GsoRep["IDS_STRING_BACK"]" />
+                    <BClose OnClick="Close" />
                 </div>
             </ButtonModal>
         </BlazorLibrary.Shared.FormComponent.FormDefault>
     </BodyContent>
 </ModalDialog>
 
-<CheckP BitPosList="@(new[]{NameBitsPos.Create, NameBitsPos.CreateNoStandart})">
+<CheckP BitPosList="@(new[]{NameBitsPos.CreateSit, NameBitsPos.CreateNoStandart})">
     @if (ViewInfoMessage)
     {
         <CreateMessage TitleText="@GsoRep["IDS_REG_MESS_INSERT"]" CallBack="SaveCallBack" MsgId="@(IsNewMessage?null:SelectItem?.CustMsg?.ObjID)" Edit="IsNewMessage" />

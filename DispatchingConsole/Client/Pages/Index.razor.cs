@@ -1,19 +1,14 @@
-﻿using System;
-using System.IO;
-using System.Runtime.InteropServices.JavaScript;
-using System.Text.Json.Nodes;
-using BlazorLibrary.GlobalEnums;
+﻿using BlazorLibrary.GlobalEnums;
+using BlazorLibrary.Helpers;
 using BlazorLibrary.Models;
-using BlazorLibrary.Shared.Audio;
 using DispatchingConsole.Client.Shared;
-using DispatchingConsole.Client.WebRTC;
 using FiltersGSOProto.V1;
+using LocalizationLibrary;
 using Microsoft.AspNetCore.Components;
-using Microsoft.AspNetCore.Components.Forms;
 using Microsoft.AspNetCore.Components.Web;
 using Microsoft.JSInterop;
 using SensorM.GsoCore.SharedLibrary;
-using SharedLibrary;
+using SharedLibrary.GlobalEnums;
 using SharedLibrary.Models;
 using SharedLibrary.Utilities;
 using static BlazorLibrary.Shared.Main;
@@ -29,6 +24,8 @@ namespace DispatchingConsole.Client.Pages
         public string? MissedKeyChatRoom { get; set; }
 
         bool isSoundRecord = true;
+
+        bool IsLoadPage => _webRtc.LoadConnectList || _webRtc.LoadChangeSelectValue;
 
         bool IsRecording { get; set; } = false;
 
@@ -67,10 +64,6 @@ namespace DispatchingConsole.Client.Pages
             {
                 return _webRtc.SelectConnect;
             }
-            set
-            {
-                _webRtc.SelectConnect = value;
-            }
         }
 
         ElementReference _textArea { get; set; }
@@ -91,31 +84,21 @@ namespace DispatchingConsole.Client.Pages
         long UploadForDialog = 0;
         long UploadForDrop = 0;
         Guid? DropFileToChat = null;
-
         protected override async Task OnInitializedAsync()
         {
+            _webRtc.CallBackUpdateView = StateHasChanged;
             _ = _webRtc.OnInitializedCommunicationAsync("localVideo", "remoteVideoArray");
-
-            _appId = await _localStorage.GetAppIdAsync();
+            _appId = Http.DefaultRequestHeaders.GetHeader(nameof(CookieName.AppId));
 
             UserName = await _User.GetName() ?? "Error get ligin";
 
             await _webRtc.OnStartListenLocalHub(_appId);
             if (Layout != null)
+            {
                 await Layout.LoadFirstLevel();
-            _webRtc.CallBackUpdateView = StateHasChanged;
+            }
             await _webRtc.OnLoadMissedCall();
-
-            HintItems.Add(new HintItem(nameof(FiltrModel.UserName), DispRep["USER"], TypeHint.Input));
-            HintItems.Add(new HintItem(nameof(FiltrModel.AuthorityUrl), DispRep["IP_ADDRESS"], TypeHint.Input));
-            HintItems.Add(new HintItem(nameof(FiltrModel.Message), GsoRep["MESSAGE"], TypeHint.Input));
-            HintItems.Add(new HintItem(nameof(FiltrModel.DateCreate), DispRep["DATAONLY"], TypeHint.DateOnly));
-            HintItems.Add(new HintItem(nameof(FiltrModel.TimeCreate), DispRep["TIME"], TypeHint.Time));
-            HintItems.Add(new HintItem(nameof(FiltrModel.IsRecord), DispRep["IS_RECORD"], TypeHint.Bool, null, FiltrOperationType.Equal));
-
             TimerRecord.Elapsed += _timer_Elapsed;
-
-            await OnInitFiltr(RefreshMessages, FiltrName.FiltrMessagesPods);
         }
 
         private void _timer_Elapsed(object? sender, System.Timers.ElapsedEventArgs e)
@@ -147,19 +130,9 @@ namespace DispatchingConsole.Client.Pages
             }
         }
 
-
         void OnDragOver(DragEventArgs e)
         {
             e.DataTransfer.DropEffect = "move";
-        }
-
-
-
-
-        private Task RefreshMessages()
-        {
-            _webRtc.SetFiltrModel(FiltrModel);
-            return Task.CompletedTask;
         }
 
         void CloseEditListConnect()
@@ -169,7 +142,6 @@ namespace DispatchingConsole.Client.Pages
             SelectItemConnect = null;
             SelectListConnect = null;
         }
-
         void RemoveSelect()
         {
             if (NewItemConnect != null && SelectItemConnect?.Count > 0)
@@ -336,7 +308,7 @@ namespace DispatchingConsole.Client.Pages
                     {
                         if (file.Length > 50_000_000)
                         {
-                            MessageView?.AddError("", $"{GsoRep["IDS_E_MAX_SIZE"]} ({50} Мбайт)");
+                            MessageView?.AddError("", $"{GsoRep["IDS_E_MAX_SIZE"]} ({50} {GsoRep[nameof(GsoLocalizationKey.MBYTE)]})");
                             return;
                         }
                         FileSize = file.Length;
@@ -486,7 +458,7 @@ namespace DispatchingConsole.Client.Pages
                     {
                         if (stream.Length > 50_000_000)
                         {
-                            MessageView?.AddError("", $"{GsoRep["IDS_E_MAX_SIZE"]} ({50} Мбайт)");
+                            MessageView?.AddError("", $"{GsoRep["IDS_E_MAX_SIZE"]} ({50} {GsoRep[nameof(GsoLocalizationKey.MBYTE)]})");
                         }
                         else
                         {
@@ -509,25 +481,18 @@ namespace DispatchingConsole.Client.Pages
             IsRecording = false;
         }
 
-
+        async Task SetSelectValue()
+        {
+            if (SelectConnect != null)
+            {
+                await _webRtc.SetSelectValue(_webRtc.ConnectList.FirstOrDefault(x => x.Key != SelectConnect.Key && (x.Items.Any(i => i.State >= StateCall.Calling))));
+            }
+        }
         async Task OnKeyUp(KeyboardEventArgs e)
         {
             if (e.Key == "Enter" && !e.ShiftKey && !e.AltKey && !e.CtrlKey && !e.MetaKey)
             {
                 _shouldPreventDefault = true;
-
-                //var s = System.Text.Json.JsonSerializer.Serialize(_textArea.Context);
-
-                //var parent = await JSRuntime.InvokeAsync<IJSObjectReference>("document.querySelector", ".table-scroll-v");
-
-                //if (parent != null)
-                //{
-                //    var heigth = await parent.InvokeAsync<string?>("scrollHeight.toString");
-
-                //    await parent.DisposeAsync();
-                //}
-
-
                 await SendMessageForClient();
             }
             else
@@ -588,20 +553,12 @@ namespace DispatchingConsole.Client.Pages
             }
         }
 
-        public ValueTask DisposeAsync()
+        public async ValueTask DisposeAsync()
         {
-            SelectConnect = null;
-            if (_jsModuleRecordAudio != null)
-            {
-                _jsModuleRecordAudio.DisposeAsync();
-            }
-            if (_recordAudio != null)
-            {
-                _recordAudio.DisposeAsync();
-            }
+            _jsModuleRecordAudio?.DisposeAsync();
+            _recordAudio?.DisposeAsync();
             TimerRecord.Close();
-
-            return _webRtc.DisposeIndexPage();
+            await _webRtc.DisposeIndexPage();
         }
     }
 }

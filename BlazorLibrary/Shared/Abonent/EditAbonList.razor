@@ -59,7 +59,7 @@
                 }
             }
             <ButtonModal>
-                <CheckP BitPos="NameBitsPos.Create" SystemID="SubsystemType.SUBSYST_ASO">
+                <CheckP BitPosList="[NameBitsPos.CreateAbon, NameBitsPos.CreateNoStandart]" SystemID="SubsystemType.SUBSYST_ASO">
                     <BSumbit IsProcessing="context" />
                     @if (CallbackEvent.HasDelegate)
                     {
@@ -71,7 +71,7 @@
     </BodyContent>
 </ModalDialog>
 
-<CheckP BitPos="NameBitsPos.Create" SystemID="SubsystemType.SUBSYST_ASO">
+<CheckP BitPosList="[NameBitsPos.CreateAbon, NameBitsPos.CreateNoStandart]" SystemID="SubsystemType.SUBSYST_ASO">
     @if (IsSave)
     {
         <ModalDialog Title="@AsoRep["IDS_STRING_INFO"]" ButtonCloseEvent="()=>IsSave=false">

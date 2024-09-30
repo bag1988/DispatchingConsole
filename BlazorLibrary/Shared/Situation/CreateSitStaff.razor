@@ -61,17 +61,14 @@
                             </ResultView>
                             <ButtonModal AddClass="text-end">
                                 <BCancel OnClick="GoCallBack" />
-                                @if ((GetListTree?.Any() ?? false) && !IsReadOnly)
-                                {
-                                    <div class="ms-auto">
-                                        <BSecondary HotKey="@KeyCode.AddSelect" IsOutline="true" OnClick="AddSelect">
-                                            <span class="oi oi-caret-right me-0 ms-2"></span>
-                                        </BSecondary>
-                                        <BSecondary HotKey="@KeyCode.AddSelectAll" IsOutline="true" OnClick="AddAll">
-                                            <span class="oi oi-media-skip-forward me-0 ms-2"></span>
-                                        </BSecondary>
-                                    </div>
-                                }
+                                <div class="ms-auto">
+                                    <BSecondary HotKey="@KeyCode.AddSelect" IsOutline="true" OnClick="AddSelect" IsDisabled="@(IsReadOnly || !(SelectData?.Count > 0) || !(GetListTree?.Any() ?? false))">
+                                        <span class="oi oi-caret-right me-0 ms-2"></span>
+                                    </BSecondary>
+                                    <BSecondary HotKey="@KeyCode.AddSelectAll" IsOutline="true" OnClick="AddAll" IsDisabled="@(IsReadOnly || !(GetListTree?.Any() ?? false))">
+                                        <span class="oi oi-media-skip-forward me-0 ms-2"></span>
+                                    </BSecondary>
+                                </div>
                             </ButtonModal>
                         </DivScroll>
                     </div>
@@ -86,29 +83,26 @@
                                     <span class="oi oi-@(GetIconName(item.SitID?.SubsystemID))"></span>@item.SitName
                                 </ChildContent>
                             </ResultView>
-                            @if (SelectFolders?.Any() ?? false)
-                            {
-                                <CheckP BitPosList="@(new[]{NameBitsPos.Create, NameBitsPos.CreateNoStandart})">
-                                    <ButtonModal>
-                                        @if (!IsReadOnly)
-                                        {
-                                            @*Удалить все объекты из списка*@
-                                            <BSecondary IsOutline="true" HotKey="@KeyCode.AddSelectAll" OnClick="RemoveAll">
-                                                <span class="oi oi-media-skip-backward"></span>
-                                            </BSecondary>
-
-                                            @*Удаление выбранный объект из списка*@
-                                            <BSecondary IsOutline="true" HotKey="@KeyCode.AddSelect" OnClick="RemoveSelect">
-                                                <span class="oi oi-caret-left"></span>
-                                            </BSecondary>
-                                        }
-                                        @if (!string.IsNullOrEmpty(NewSit.SitName))
-                                        {
-                                            <BSumbit Text="@GsoRep["IDS_STRING_NEXT"]" AddClass="m-1 ms-auto" IsProcessing="context" />
-                                        }
-                                    </ButtonModal>
-                                </CheckP>
-                            }
+                            <CheckP BitPosList="@(new[]{NameBitsPos.CreateSit, NameBitsPos.CreateNoStandart})" SystemID="@SubsystemType.SUBSYST_STAFF">
+                                <ButtonModal>
+                                    @*Удалить все объекты из списка*@
+                                    <BSecondary IsOutline="true" HotKey="@KeyCode.AddSelectAll" OnClick="RemoveAll" IsDisabled="@(IsReadOnly || !(SelectFolders?.Any() ?? false))">
+                                        <span class="oi oi-media-skip-backward"></span>
+                                    </BSecondary>
+                                    @*Удаление выбранный объект из списка*@
+                                    <BSecondary IsOutline="true" HotKey="@KeyCode.AddSelect" OnClick="RemoveSelect" IsDisabled="@(IsReadOnly || !(SelectFolders?.Any() ?? false) || SelectItem==null || SelectItem.Count ==0)">
+                                        <span class="oi oi-caret-left"></span>
+                                    </BSecondary>
+                                    @if (SelectFolders?.Any() ?? false)
+                                    {
+                                        <BSumbit Text="@GsoRep["IDS_STRING_NEXT"]" AddClass="m-1 ms-auto" IsProcessing="context" />
+                                    }
+                                    else
+                                    {
+                                        <BDark IsDisabled="@(true)" AddClass="m-1 ms-auto" Text="@GsoRep["IDS_STRING_NEXT"]" />
+                                    }
+                                </ButtonModal>
+                            </CheckP>
                         </DivScroll>
                     </div>
                 </div>
@@ -125,6 +119,6 @@
 {
     if (SelectFolders != null)
     {
-        <StaffPage StaffList="SelectFolders" IsReadOnly="IsReadOnly" NextAction="SaveSitStaff" />
+        <StaffPage StaffList="SelectFolders" IsReadOnly="IsReadOnly" NextAction="SaveSitStaff" CloseAllAction="CloseAll" />
     }
 }

@@ -43,7 +43,7 @@ namespace BlazorLibrary.Helpers
             else if (connType != BaseLineType.LINE_TYPE_DEDICATED)
             {
                 //проверка на корректность ввода
-                Regex regexGSM = new(@"[^\d,ptw\*#v]");
+                Regex regexGSM = new(@"[^\d,ptw\*#v\+]");
                 return !regexGSM.IsMatch(connParam);
             }
             else
@@ -66,7 +66,7 @@ namespace BlazorLibrary.Helpers
             else if (connType != BaseLineType.LINE_TYPE_DEDICATED)
             {
                 //проверка на корректность ввода
-                Regex regexGSM = new(@"[^\d,ptw\*#v]");
+                Regex regexGSM = new(@"[^\d,ptw\*#v\+]");
                 return regexGSM.Replace(connParam, "");
             }
             else

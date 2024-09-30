@@ -1,27 +1,37 @@
 ﻿<TitleView>@Rep["Authorize"]</TitleView>
-<div class="row">
-    <div class="col-md-8 offset-md-2" tabindex="0">
+
+<div class="d-flex" style="height:80vh;">
+    <div style="max-width: 500px; margin:auto; flex: auto;" class="border rounded border-theme p-5">
         <EditForm Model="loginRequest" OnSubmit="SetLogin">
-            @if (!string.IsNullOrEmpty(ErrorString))
+            @if (StateAuthorize != null)
             {
-                <div class="mb-3 row">
-                    <p class="alert alert-danger">@ErrorString</p>
-                </div>
+                @if (StateAuthorize < SensorM.GsoCore.SharedLibrary.PuSubModel.StatusAuthorize.GET_PARAMS)
+                {
+                    <p class="alert alert-danger py-2">@GsoRep[StateAuthorize.Value.ToString()]</p>
+                }
+                else if (!string.IsNullOrEmpty(InfoMessage))
+                {
+                    <p class="alert alert-info py-2">@InfoMessage</p>
+                }
             }
-            <div class="mb-3 row">
-                <label for="staticEmail" class="col-sm-2 col-form-label">@Rep["LoginName"]</label>
-                <div class="col-sm-10">
+            <div class="mb-3">
+                <label for="staticEmail" class="mb-2">@Rep["LoginName"]</label>
+                <div>
                     <InputFocus @bind-Value="loginRequest.User" />
                 </div>
             </div>
-            <div class="mb-3 row">
-                <label for="inputPassword" class="col-sm-2 col-form-label">@Rep["Password"]</label>
-                <div class="col-sm-10">
+            <div class="mb-3">
+                <label for="inputPassword" class="mb-2">@Rep["Password"]</label>
+                <div>
                     <input type="password" name="Password" class="form-control" @bind="loginRequest.Password">
                 </div>
             </div>
-            <div class="mb-3 row">
-                <BSumbit AddClass="mb-3" Text="@Rep["Login"]" ColorButton="primary" IsProcessing="@IsProcessing" />
+            <div class="d-flex">
+                <BSumbit AddClass="flex-fill" Text="@Rep["Login"]" ColorButton="primary" IsProcessing="@IsProcessing" />
+                @if (IsProcessing)
+                {
+                    <BCancel AddClass="ms-2" OnClick="StopAuthorize" />
+                }
             </div>
         </EditForm>
     </div>

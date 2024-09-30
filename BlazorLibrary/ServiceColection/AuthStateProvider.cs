@@ -13,6 +13,7 @@ namespace BlazorLibrary.ServiceColection
             _localStorage = localStorage;
             _anonymous = new AuthenticationState(new ClaimsPrincipal(new ClaimsIdentity()));
         }
+
         public override async Task<AuthenticationState> GetAuthenticationStateAsync()
         {
             var token = await _localStorage.GetTokenAsync();
@@ -27,6 +28,8 @@ namespace BlazorLibrary.ServiceColection
             NotifyUserLogout();
             return _anonymous;
         }
+
+
         public void NotifyUserAuthentication(IEnumerable<Claim> claims)
         {
             var authenticatedUser = new ClaimsPrincipal(new ClaimsIdentity(claims, "bearer"));
@@ -37,11 +40,6 @@ namespace BlazorLibrary.ServiceColection
         {
             var authState = Task.FromResult(_anonymous);
             NotifyAuthenticationStateChanged(authState);
-        }
-
-        public async Task<ClaimsPrincipal> GetUser()
-        {
-            return (await GetAuthenticationStateAsync()).User;
         }
     }
 }

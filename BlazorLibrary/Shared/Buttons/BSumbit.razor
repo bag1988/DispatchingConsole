@@ -1,12 +1,12 @@
 ﻿@inherits ButtonDefault
-<button @ref="button" form="@FormId" disabled="@(IsProcessing?"disabled":null)" type="submit" class="btn btn@(IsOutline==true?"-outline":"")-@ColorButton @(TextWrap==true?"text-wrap":"text-nowrap") @AddClass">@_content</button>
+<button @ref="button" title="@Title" form="@FormId" disabled="@GetDisabledd" type="submit" class="@GetClass(ColorButton)">@_content</button>
 
 @code {
     [Parameter]
     public string? FormId { get; set; }
 
     [Parameter]
-    public string? ColorButton { get; set; } = "dark";
+    public string ColorButton { get; set; } = "dark";
 
     [Parameter]
     public bool SetFocus { get; set; } = false;

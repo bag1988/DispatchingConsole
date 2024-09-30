@@ -31,7 +31,7 @@
                     <div class="row col-md-6">
                         <label class="form-label col-md-4">@UUZSRep["IDS_STRING_LENGTH_TIMESLOT"], @UUZSRep["IDS_STRING_MSEK"]</label>
                         <div class="col-md-8">
-                            <input type="number" max="99999999999" class="form-control" @bind="Model.TimeslotLength" required>
+                            <input type="number" min="1" max="99999999999" class="form-control" @bind="Model.TimeslotLength" required>
                         </div>
                     </div>
                 </div>
@@ -88,18 +88,15 @@
                             </ChildContent>
                         </ResultView>
                         <ButtonModal AddClass="text-end">
-                            <BCancel OnClick="CallAction" />
-                            @if (GetListTree?.Any() ?? false)
-                            {
-                                <div class="ms-auto">
-                                    <BSecondary HotKey="@KeyCode.AddSelect" IsOutline="true" OnClick="AddSelect">
-                                        <span class="oi oi-caret-right me-0 ms-2"></span>
-                                    </BSecondary>
-                                    <BSecondary HotKey="@KeyCode.AddSelectAll" IsOutline="true" OnClick="AddAll">
-                                        <span class="oi oi-media-skip-forward me-0 ms-2"></span>
-                                    </BSecondary>
-                                </div>
-                            }
+                            <BCancel OnClick="CallAction" />                            
+                            <div class="ms-auto">
+                                <BSecondary HotKey="@KeyCode.AddSelect" IsOutline="true" OnClick="AddSelect" IsDisabled="@(!(GetListTree?.Any() ?? false) || !(SelectData?.Count > 0))">
+                                    <span class="oi oi-caret-right me-0 ms-2"></span>
+                                </BSecondary>
+                                <BSecondary HotKey="@KeyCode.AddSelectAll" IsOutline="true" OnClick="AddAll" IsDisabled="@(!(GetListTree?.Any() ?? false))">
+                                    <span class="oi oi-media-skip-forward me-0 ms-2"></span>
+                                </BSecondary>
+                            </div>
                         </ButtonModal>
                     </DivScroll>
                 </div>
@@ -113,24 +110,20 @@
                             <ChildContent Context="item">
                                 <span class="oi oi-volume-high text-warning"></span>@item.DevName
                             </ChildContent>
-                        </ResultView>
-                        @if (SelectedFolders?.Any() ?? false)
-                        {
-                            <CheckP BitPosList="@(new[]{NameBitsPos.Create, NameBitsPos.CreateNoStandart})">
-                                <ButtonModal>
-                                    @*Удалить все объекты из списка*@
-                                    <BSecondary IsOutline="true" HotKey="@KeyCode.AddSelectAll" OnClick="RemoveAll">
-                                        <span class="oi oi-media-skip-backward"></span>
-                                    </BSecondary>
-
-                                    @*Удаление выбранный объект из списка*@
-                                    <BSecondary IsOutline="true" HotKey="@KeyCode.AddSelect" OnClick="RemoveSelect">
-                                        <span class="oi oi-caret-left"></span>
-                                    </BSecondary>
-                                    <BSumbit IsProcessing="context" AddClass="m-1 ms-auto" />
-                                </ButtonModal>
-                            </CheckP>
-                        }
+                        </ResultView>              
+                        <CheckP BitPosList="@(new[]{NameBitsPos.Create, NameBitsPos.CreateNoStandart})">
+                            <ButtonModal>
+                                @*Удалить все объекты из списка*@
+                                <BSecondary IsOutline="true" HotKey="@KeyCode.AddSelectAll" OnClick="RemoveAll" IsDisabled="@(!(SelectedFolders?.Any() ?? false))">
+                                    <span class="oi oi-media-skip-backward"></span>
+                                </BSecondary>
+                                @*Удаление выбранный объект из списка*@
+                                <BSecondary IsOutline="true" HotKey="@KeyCode.AddSelect" OnClick="RemoveSelect" IsDisabled="@(!(SelectedFolders?.Any() ?? false) || !(SelectItem?.Count > 0))">
+                                    <span class="oi oi-caret-left"></span>
+                                </BSecondary>
+                                <BSumbit IsProcessing="context" AddClass="m-1 ms-auto" IsDisabled="@(!(SelectedFolders?.Any() ?? false))" />
+                            </ButtonModal>
+                        </CheckP>
                     </DivScroll>
                 </div>
             </div>

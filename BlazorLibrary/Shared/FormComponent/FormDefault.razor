@@ -27,7 +27,9 @@
         try
         {
             if (OnSumbit.HasDelegate)
+            {
                 await OnSumbit.InvokeAsync();
+            }
         }
         catch (Exception ex)
         {

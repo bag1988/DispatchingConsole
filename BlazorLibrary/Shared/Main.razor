@@ -1,41 +1,87 @@
 ﻿@using BlazorLibrary.Shared.NavLink
+@inject AuthenticationStateProvider _authStateProvider;
 @inject ILogger<Main> _logger
 <div class="page" @onclick="OnSetActive" @onkeyup="OnSetActive">
     @if (isPageLoad)
     {
-        <NavMenu Title="@Title" Width="Width">
-            @if (!IsLoadRemoteAuth)
+        <NavMenu Title="@Title" Width="Width" LogoutUser="LogoutUser" PVersion="PVersion" CollapseNavMenu="CollapseNavMenu" ChangeLanguage="ChangeLanguage">
+            @if (_authHubContext?.State == Microsoft.AspNetCore.SignalR.Client.HubConnectionState.Connected)
             {
                 @Menu
             }
         </NavMenu>
-
         <main tabindex="-1" class="main">
+            <button title="@GsoRep["NAVIGATION"]" class="navbar-menu navbar-toggler" @onclick="ToggleNavMenu">&#9776;</button>
             <article class="px-4">
-                @if (!IsLoadRemoteAuth)
+                @if (_newVersionAvailable)
+                {
+                    <div class="bg-warning top-row text-center fs-5 px-4 py-2 pointer" @onclick="UpdateServiceWorker">
+                        @if (IsUpdateServiceWorker)
+                        {
+                            <span class="spinner-border spinner-border-sm me-2" role="status"></span>
+                        }
+                        @GsoRep["AVAILABLE_NEW_VERSION"]
+                    </div>
+                }
+                @if (_authHubContext?.State == Microsoft.AspNetCore.SignalR.Client.HubConnectionState.Connected)
                 {
                     <AuthorizeView>
                         <Authorizing>
                             <p class="alert alert-warning mt-3">@GsoRep["CheckLogin"]</p>
                         </Authorizing>
                         <Authorized>
-                            <div style="height:100vh; position:relative;">
+                            <div class="@(!CollapseNavMenu?"d-none":"")">
                                 @ChildContent
                             </div>
                         </Authorized>
                         <NotAuthorized>
-                            <LoginPage />
+                            <LoginPage ActinStartAuthorize="AuthorizeUser" StopAuthorize="StopAuthorize" StateAuthorize="@StateAuthorize" IsProcessing="@IsProcessingAuthorize" />
                         </NotAuthorized>
                     </AuthorizeView>
                 }
                 else
                 {
-                    <PLoad />
+                    <div class="d-flex" style="height:80vh;">
+                        <div style="max-width: 500px; margin:auto; flex: auto;" class="border rounded border-theme p-5 text-center">
+                            @GsoRep["NO_CONNECT_TO_AUTHORIZE_SERVER"]                            
+                            @if (NumberAttempsErrorConnect == 0)
+                            {
+                                <p class="text-danger my-1">
+                                    @GsoRep["ERROR_CONNECT_COUNT"]
+                                </p>
+                                <a @onclick="ReplayConnect" class="text-info pointer">@GsoRep["REPLAY"]</a>
+                            }
+                            else if (NumberAttempsErrorConnect < MaxNumberAttempsErrorConnect)
+                            {
+                                <span class="text-danger d-block">@GsoRep[nameof(GsoLocalizationKey.ATTEMPT_RECONNECT_SERVER), MaxNumberAttempsErrorConnect - NumberAttempsErrorConnect, MaxNumberAttempsErrorConnect]</span>
+                            }
+                        </div>
+                    </div>
                 }
             </article>
-            <MessageViewList @ref="MessageView" />
         </main>
+        @if (ConflictMessage != null)
+        {
+            <ModalDialog Title="@GSOFormRep["IDS_WARNING"]" ButtonCloseEvent="()=>SendAnsewerConflict(false)">
+                <BodyContent>
+                    <p class="alert alert-warning">
+                        @GsoRep["IN_REQUEST_ACCESS"] <b>@ConflictMessage.WhoRequestIpAddress</b>
+                    </p>
+                </BodyContent>
+                <ButtonContent>
+                    <BDark HotKey="@KeyCode.Enter" OnClick="()=>SendAnsewerConflict(true)" Text="@($"{GsoRep["ALLOW"]} ({LoadSecond})")" />
+                    <BDark IsOutline="true" HotKey="@KeyCode.Escape" OnClick="()=>SendAnsewerConflict(false)" Text="@GsoRep["PROHIBIT"]" />
+                </ButtonContent>
+            </ModalDialog>
+        }
     }
+    else
+    {
+        <div class="w-100 p-3">
+            <PLoad />
+        </div>
+    }
+    <MessageViewList @ref="MessageView" />
 </div>
 
 

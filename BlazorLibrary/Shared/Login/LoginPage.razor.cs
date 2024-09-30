@@ -1,46 +1,85 @@
-﻿using BlazorLibrary.Helpers;
-using Microsoft.AspNetCore.Components;
-using Microsoft.AspNetCore.Components.Forms;
+﻿using Microsoft.AspNetCore.Components;
+using SensorM.GsoCore.SharedLibrary.PuSubModel;
 using SMDataServiceProto.V1;
 
 namespace BlazorLibrary.Shared.Login;
 
-partial class LoginPage
+partial class LoginPage : IDisposable
 {
-    private string? ErrorString;
+    [Parameter]
+    public EventCallback<RequestLogin> ActinStartAuthorize { get; set; }
 
-    bool IsProcessing = false;
+    [Parameter]
+    public EventCallback StopAuthorize { get; set; }
+
+    [Parameter]
+    public StatusAuthorize? StateAuthorize { get; set; }
+
+    [Parameter]
+    public bool IsProcessing { get; set; }
 
     readonly RequestLogin loginRequest = new();
 
+    readonly System.Timers.Timer timerLoadAccess = new(TimeSpan.FromSeconds(1));
+
+    uint LoadSecond = Main.MinTimeoutLoad;
+
+    string? InfoMessage
+    {
+        get
+        {
+            if (StateAuthorize != null)
+            {
+                var response = GsoRep[StateAuthorize.Value.ToString()].Value;
+                if (StateAuthorize == StatusAuthorize.START_WAIT)
+                {
+                    if (LoadSecond == 10 && timerLoadAccess != null)
+                    {
+                        timerLoadAccess.Start();
+                    }
+
+                    response = $"{response} ({LoadSecond})";
+                }
+                return response;
+            }
+            return null;
+        }
+    }
+
     protected override async Task OnInitializedAsync()
     {
+        timerLoadAccess.Elapsed += TimerLoadAccess_Elapsed;
         loginRequest.User = await _localStorage.GetLastUserName() ?? "";
+    }
+
+    private void TimerLoadAccess_Elapsed(object? sender, System.Timers.ElapsedEventArgs e)
+    {
+        if (LoadSecond > 0)
+        {
+            LoadSecond--;
+            StateHasChanged();
+        }
+        else if (timerLoadAccess != null)
+        {
+            timerLoadAccess.Stop();
+        }
     }
 
     private async Task SetLogin()
     {
-        if (string.IsNullOrEmpty(loginRequest.User))
+        LoadSecond = Main.MinTimeoutLoad;
+        if (ActinStartAuthorize.HasDelegate)
         {
-            ErrorString = Rep["EmptyLogin"];
-            return;
+            await ActinStartAuthorize.InvokeAsync(loginRequest);
         }
-        ErrorString = null;
-        IsProcessing = true;
-        ErrorLoginUser result = await AuthenticationService.Login(loginRequest);
-        
-        if (result == ErrorLoginUser.NoFindUser)
+    }
+
+    public void Dispose()
+    {
+        if (timerLoadAccess != null)
         {
-            ErrorString = GsoRep["NO_FIND_USER"];
+            timerLoadAccess.Stop();
+            timerLoadAccess.Dispose();
         }
-        else if (result == ErrorLoginUser.NoConnect)
-        {
-            ErrorString = GsoRep["NO_CONNECT"];
-        }
-        else if (result == ErrorLoginUser.NoAccess)
-        {
-            ErrorString = GsoRep["NO_ACCESS"];
-        }
-        IsProcessing = false;
     }
 }

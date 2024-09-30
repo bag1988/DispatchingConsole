@@ -8,20 +8,20 @@
         <legend>@GSOFormRep["IDC_STATIC_DTMF_CONFIRM_MODE"]</legend>
         Информирование о правильности ввода DTMF пароля
         <div class="row mb-2">
-            <label class="form-check-label me-3"><input type="checkbox" class="form-check-input me-2"/>@GSOFormRep["IDC_CHECK_DTMF_CONFIRM"]</label>
+            <label class="form-check-label me-3"><input type="checkbox" class="form-check-input me-2" @bind:after="CallEvent"/>@GSOFormRep["IDC_CHECK_DTMF_CONFIRM"]</label>
         </div>
         Общая длительность ожидания подтверждения DTMF паролем (с)
         <div class="row mb-2">
             <label class="form-label col-md-4">@GSOFormRep["IDC_CHECK_DTMF_TIMEOUT"]</label>
             <div class="col-md-8">
-                <input type="number" class="form-control" min="0" max="90">
+                <input type="number" class="form-control" min="0" max="90" @bind:after="CallEvent">
             </div>
         </div>
         Повторы ввода DTMF пароля
         <div class="row">
             <label class="form-label col-md-4">@GSOFormRep["IDC_CHECK_DTMF_REPEAT_COUNT"]</label>
             <div class="col-md-8">
-                <input type="number" class="form-control" min="0" max="3">
+                <input type="number" class="form-control" min="0" max="3" @bind:after="CallEvent">
             </div>
         </div>
     </fieldset>
@@ -37,4 +37,30 @@ else
 @code {
     [Parameter]
     public SubsystemParam? SubParam { get; set; }
+
+    [Parameter]
+    public EventCallback CallEventChange { get; set; }
+
+    bool AllowTTS
+    {
+        get
+        {
+            return SubParam?.AllowTTS == 1 ? true : false;
+        }
+        set
+        {
+            if (SubParam != null)
+            {
+                SubParam.AllowTTS = value ? 1 : 0;
+            }
+        }
+    }
+
+    async Task CallEvent()
+    {
+        if (CallEventChange.HasDelegate)
+        {
+            await CallEventChange.InvokeAsync();
+        }
+    }
 }

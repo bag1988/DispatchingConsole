@@ -1,24 +1,16 @@
-﻿using BlazorLibrary.Helpers;
-using Microsoft.AspNetCore.Components.Authorization;
+﻿using Microsoft.AspNetCore.Components.Authorization;
 using SharedLibrary;
-using SharedLibrary.GlobalEnums;
 using SharedLibrary.Models;
 
 namespace BlazorLibrary.ServiceColection;
 
 public class GetUserInfo
 {
-    readonly HttpClient _http;
-
     readonly AuthenticationStateProvider _authState;
 
-    readonly LocalStorage _localStorage;
-
-    public GetUserInfo(HttpClient httpClient, AuthenticationStateProvider authState, LocalStorage localStorage)
+    public GetUserInfo(AuthenticationStateProvider authState)
     {
-        _http = httpClient;
         _authState = authState;
-        _localStorage = localStorage;
     }
 
     async Task<AuthorizUser?> GetUserAsync()
@@ -71,6 +63,28 @@ public class GetUserInfo
         return per;
     }
 
+    public async Task<byte[]?> GetAuthPermForSubsystem(int systemId)
+    {
+        var Permisions = await GetAuthPerm();
+        return systemId switch
+        {
+            SubsystemType.SUBSYST_ASO => Permisions.PerAccAso,
+            SubsystemType.SUBSYST_SZS => Permisions.PerAccSzs,
+            SubsystemType.SUBSYST_GSO_STAFF => Permisions.PerAccCu,
+            SubsystemType.SUBSYST_P16x => Permisions.PerAccP16,
+            SubsystemType.SUBSYST_Security => Permisions.PerAccSec,
+            SubsystemType.SUBSYST_Setting => Permisions.PerAccFn,
+            SubsystemType.SUBSYST_RDM => Permisions.PerAccRdm,
+            _ => null
+        };
+    }
+
+    public async Task<bool> CheckPermForSubsystem(int systemId, int[]? PosBit = null)
+    {
+        var per = await GetAuthPermForSubsystem(systemId);
+        return CheckPermission.CheckBitPos(per, PosBit);        
+    }
+
     public async Task<int> GetUserId()
     {
         int UserID = 0;
@@ -89,30 +103,4 @@ public class GetUserInfo
 
         return CanStartStopNotify;
     }
-
-    //public async Task<int> GetSubSystemID()
-    //{
-    //    int id = 0;
-    //    try
-    //    {
-    //        int.TryParse(_http.DefaultRequestHeaders.GetHeader(CookieName.SubsystemID), out id);
-    //        if (id == 0)
-    //        {
-    //            id = await _localStorage.GetSubSystemIdAsync() ?? SubsystemType.SUBSYST_ASO;
-    //            _http.DefaultRequestHeaders.AddHeader(CookieName.SubsystemID, id.ToString());
-    //        }
-    //    }
-    //    catch (Exception ex)
-    //    {
-    //        Console.WriteLine(ex.Message);
-    //    }        
-    //    return id;
-    //}
-
-    //public async Task<bool> SetSubsystemId(int subSystemId)
-    //{
-    //    _http.DefaultRequestHeaders.AddHeader(CookieName.SubsystemID, subSystemId.ToString());
-    //    //await _localStorage.SetSubSystemIdAsync(subSystemId);
-    //    return true;
-    //}
 }

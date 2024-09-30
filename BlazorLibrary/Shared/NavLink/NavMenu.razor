@@ -1,6 +1,6 @@
 ﻿@inject ILogger<NavMenu> _logger
 <PageTitle>@Title</PageTitle>
-    <div class="sidebar" @onkeydown="KeySet" tabindex="0" @ref="div" style="max-height:100vh;  min-width:@(Width)px; width:@(Width)px">
+<div class="sidebar @(CollapseNavMenu?"collapse":"sidebar-full" )" @onkeydown="KeySet" tabindex="0" @ref="div" style="max-height:100vh;  min-width:@(Width)px; width:@(Width)px">
     <div class="top-row py-0 navbar navbar-dark">
         <div class="container-fluid">
             <a class="navbar-brand text-center" href="">
@@ -8,30 +8,29 @@
                 <small style="display: block;font-size: 0.7em;">@GetVersionUi</small>
                 <small style="display: block;font-size: 0.7em;">@dateNow</small>
             </a>
-            <button title="Navigation menu" class="navbar-toggler" @onclick="ToggleNavMenu">
-                <span class="navbar-toggler-icon"></span>
-            </button>
+            <button title="Navigation menu" class="navbar-toggler" @onclick="ToggleNavMenu">&#10006;</button>
         </div>
     </div>
 
     <div class="@NavMenuCssClass" style="width:inherit">
+        <div class="px-2">
+            <CultureSelector ChangeLanguage="ChangeLanguage" />
+        </div>
         <AuthorizeView>
             <Authorized>
+                <HR />
                 <div class="nav-item px-3 pt-0">
                     <div class="d-flex justify-content-between flex-wrap">
                         <span>@context.User.Identity?.Name</span>
-                        <b hotkey="@KeyCode.Logout" class="d-block pointer" @onclick="Logout">@Rep["Logout"]</b>
+                        <b hotkey="@KeyCode.Logout" class="d-block pointer" @onclick="LogoutUser">@Rep["Logout"]</b>
                     </div>
                 </div>
                 <HR />
-                @*<div class="px-2">
-                <CultureSelector />
-                </div>*@
                 <nav class="flex-column  mb-5">
                     @ChildContent
                 </nav>
             </Authorized>
-        </AuthorizeView>       
+        </AuthorizeView>
         <div class="text-white px-2 py-1 position-fixed bottom-0" style="background-color: rgba(0,0,0,0.75); z-index:1; width:inherit !important;">
             <NavLink class="nav-link text-white" @onclick="()=>IsViewAbout=!IsViewAbout" style="cursor:pointer; font-size: smaller;">
                 <span class="oi @(!IsViewAbout?"oi-caret-top":"oi-caret-bottom")" aria-hidden="true"></span> @GsoRep["About"]
@@ -44,16 +43,15 @@
                     @*Глобальная система оповещения*@
                     @*<small class="d-block my-2">@GsoRep["AboutGlobal"]</small>*@
                     @*Программный комплекс оповещения АС "ОСОДУ"*@
-                    <small class="d-block mt-2">@Rep["PO_NAME"]</small>
+                    <small class="d-block mt-2">@GetPo</small>
                     <small class="d-block mb-2">@GetPoName</small>
                     @*Версия*@
-                    <small class="d-block my-2">@GsoRep["VERSION"] @PVersion?.BuildNumber</small>
+                    <small class="d-block mb-2">@GsoRep["VERSION"] @PVersion?.BuildNumber</small>
                     <HR />
                     @*Модуль "{Наименование ПО}"*@
                     <small class="d-block my-2">@($"{StartUIRep["IDS_EVENT_MODULE"]} \"{Title}\"")</small>
-                    @*АО НПО «Сенсор» (c) Copyright-2022*@
+                    @*АО НПО «Сенсор» (c) Copyright-2024*@
                     <small class="d-block my-2">@GetCompanyName (c) Copyright-@(DateTime.Now.Year)</small>
-
                 </div>
             }
         </div>

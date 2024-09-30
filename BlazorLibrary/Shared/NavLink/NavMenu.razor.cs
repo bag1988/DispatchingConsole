@@ -1,6 +1,4 @@
-﻿using System.ComponentModel;
-using System.Net.Http.Json;
-using Microsoft.AspNetCore.Components;
+﻿using Microsoft.AspNetCore.Components;
 using Microsoft.AspNetCore.Components.Web;
 using Microsoft.Extensions.Logging;
 using Microsoft.JSInterop;
@@ -20,40 +18,54 @@ namespace BlazorLibrary.Shared.NavLink
         [Parameter]
         public int? Width { get; set; } = 250;
 
+        [Parameter]
+        public EventCallback LogoutUser { get; set; }
+
+        [Parameter]
+        public EventCallback<string> ChangeLanguage { get; set; }
+
+        [Parameter]
+        public ProductVersion? PVersion { get; set; }
+
+        [Parameter]
+        public bool CollapseNavMenu { get; set; } = true;
+
+        string? NavMenuCssClass => CollapseNavMenu ? "collapse" : null;
+
         private DateTime dateNow = DateTime.Now;
 
-        private bool collapseNavMenu = true;
-
-        private string? NavMenuCssClass => collapseNavMenu ? "collapse" : null;
 
         readonly System.Timers.Timer timer = new(1000);
 
         private bool IsViewAbout = false;
 
-        private ProductVersion? PVersion = null!;
-
         private ElementReference div = default!;
 
-        protected override async Task OnInitializedAsync()
+        protected override Task OnInitializedAsync()
         {
             try
             {
-                await Task.Run(() =>
-                {
-                    timer.Elapsed += (sender, eventArgs) =>
-                    {
-                        dateNow = DateTime.Now;
-                        StateHasChanged();
-                    };
-                    timer.Start();
-                });
-                await PVersionFull();
+                timer.Elapsed += Timer_Elapsed;
+                timer.Start();
             }
             catch (Exception ex)
             {
                 _logger.LogError(ex.Message);
             }
+            return base.OnInitializedAsync();
+        }
 
+        private void Timer_Elapsed(object? sender, System.Timers.ElapsedEventArgs e)
+        {
+            try
+            {
+                dateNow = DateTime.Now;
+                StateHasChanged();
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError("Ошибка обновления времени {message}", ex.Message);
+            }
         }
 
         public async Task KeySet(KeyboardEventArgs e)
@@ -65,27 +77,6 @@ namespace BlazorLibrary.Shared.NavLink
             }
         }
 
-        private async Task Logout()
-        {
-            await AuthenticationService.Logout();
-        }
-
-        private async Task PVersionFull()
-        {
-            try
-            {
-                var result = await Http.PostAsync("api/v1/allow/PVersionFull", null);
-                if (result.IsSuccessStatusCode)
-                {
-                    PVersion = await result.Content.ReadFromJsonAsync<ProductVersion>();
-                }
-            }
-            catch (Exception ex)
-            {
-                Console.WriteLine(ex.Message);
-            }
-        }
-
         string? GetVersionUi
         {
             get
@@ -94,50 +85,41 @@ namespace BlazorLibrary.Shared.NavLink
             }
         }
 
-        string GetCompanyName
-        {
-            get
-            {
-                if (PVersion == null)
-                {
-                    return "";
-                }
-                if (PVersion.CompanyName == "kae")
-                    return Rep["KAE_NAME"];
-                return Rep["SensorM"];
-            }
-        }
-        string GetCompanyTitleName
-        {
-            get
-            {
-                if (PVersion == null)
-                {
-                    return "";
-                }
-                if (PVersion.CompanyName == "kae")
-                    return Rep["PKO_NAME_KAE"];
-                return Rep["PKO_NAME_SENSOR"];
-            }
-        }
 
-        string GetPoName
+        string GetCompanyName => PVersion?.CompanyName switch
         {
-            get
-            {
-                if (PVersion == null)
-                {
-                    return "";
-                }
-                if (PVersion.CompanyName == "kae")
-                    return Rep["PO_NAME_KAE"];
-                return Rep["PO_NAME_SENSOR"];
-            }
-        }
+            "kae" => Rep["KAE_NAME"],
+            "sensor" => Rep["Sensor"],
+            "sensorm" => Rep["Sensor_M"],
+            _ => string.Empty,
+        };
+        string GetCompanyTitleName => PVersion?.CompanyName switch
+        {
+            "kae" => Rep["PKO_NAME_KAE"],
+            "sensor" => Rep["PKO_NAME_SENSOR"],
+            "sensorm" => Rep["PKO_NAME_SENSORM"],
+            _ => string.Empty,
+        };
+
+
+        string GetPo => PVersion?.CompanyName switch
+        {
+            "sensorm" => string.Empty,
+            _ => Rep["PO_NAME"],
+        };
+
+
+        string GetPoName => PVersion?.CompanyName switch
+        {
+            "kae" => Rep["PO_NAME_KAE"],
+            "sensor" => Rep["PO_NAME_SENSOR"],
+            "sensorm" => Rep["PO_NAME_SENSORM"],
+            _ => string.Empty,
+        };
 
         private void ToggleNavMenu()
         {
-            collapseNavMenu = !collapseNavMenu;
+            MyNavigationManager.NavigateTo(MyNavigationManager.Uri);
         }
 
         public ValueTask DisposeAsync()

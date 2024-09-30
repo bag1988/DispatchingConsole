@@ -1,20 +1,18 @@
-﻿using System.Net.Http.Json;
-using System.Reflection.Metadata;
+﻿using System.Reflection.Metadata;
 using BlazorLibrary.Models;
-using Google.Protobuf;
+using LocalizationLibrary;
 using Microsoft.AspNetCore.Components;
 using Microsoft.AspNetCore.Components.Forms;
 using Microsoft.AspNetCore.SignalR.Client;
 using Microsoft.JSInterop;
 using SharedLibrary;
 using SharedLibrary.GlobalEnums;
-using SharedLibrary.Models;
-using SMDataServiceProto.V1;
+using SharedLibrary.Interfaces;
 using static BlazorLibrary.Shared.Main;
 
 namespace BlazorLibrary.Shared.Audio
 {
-    partial class RecordAudio : IAsyncDisposable
+    partial class RecordAudio : IAsyncDisposable, IPubSubMethod
     {
         [Parameter]
         public EventCallback<string> SetSoundsUrlPlayer { get; set; }
@@ -25,14 +23,14 @@ namespace BlazorLibrary.Shared.Audio
 
         private AudioRecordSetting setting = new();
 
-        private SndSetting SettingRec = new();
+        private Models.SndSetting SettingRec = new();
 
         private TimeSpan TimeRecord;
 
         private long _uploaded = 0;
         private long _fileLength = 0;
 
-        readonly int BufferSizeSignal = 24000;
+        readonly int BufferSizeSignal = 100_000;
 
         private string FileTmpName = "";
 
@@ -42,7 +40,7 @@ namespace BlazorLibrary.Shared.Audio
 
         protected override void OnInitialized()
         {
-            _ = _HubContext.SubscribeAsync(this);
+            _ = _HubContext.SubscribeAndStartAsync(this, typeof(IPubSubMethod));
         }
 
         private async Task GetSndSettingExRec()
@@ -111,7 +109,7 @@ namespace BlazorLibrary.Shared.Audio
                 return;
             if (file.Size > int.MaxValue / 2)
             {
-                MessageView?.AddError("", $"{GsoRep["IDS_E_MAX_SIZE"]} ({int.MaxValue / 2} байт)");
+                MessageView?.AddError("", $"{GsoRep["IDS_E_MAX_SIZE"]} ({int.MaxValue / 2 / 1_000_000} {GsoRep[nameof(GsoLocalizationKey.MBYTE)]})");
                 return;
             }
             _fileLength = file.Size;

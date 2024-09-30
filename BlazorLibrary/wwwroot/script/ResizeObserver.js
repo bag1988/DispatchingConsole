@@ -4,11 +4,11 @@ export const CreateResizeObserver = (dotNet, callBackNet) =>
     const callback = async (entries, observer) => {      
       try {
         if (entries && entries.length > 0) {
-          await dotNet.invokeMethodAsync(callBackNet, entries[0].target.getBoundingClientRect());
+          await dotNet.invokeMethodAsync(callBackNet, entries[0].target.getBoundingClientRect(), entries[0].target.scrollHeight);
         }
       }
       catch (e) {
-        console.log(e);
+        console.error(e);
       }
     };
     const observer = new ResizeObserver(callback);
@@ -20,7 +20,7 @@ export const CreateResizeObserver = (dotNet, callBackNet) =>
         }
       }
       catch (e) {
-        console.log("Error start ResizeObserver for ", targetNode, e);
+        console.error("Error start ResizeObserver for ", targetNode, e);
       }     
     };
 
@@ -33,7 +33,7 @@ export const CreateResizeObserver = (dotNet, callBackNet) =>
         observer.disconnect();
       }
       catch (e) {
-        console.log("Error stop ResizeObserver for ", targetNode, e);
+        console.error("Error stop ResizeObserver for ", targetNode, e);
       }
     }
     resolve({ start, stop });

@@ -1,5 +1,5 @@
 ﻿@using FiltersGSOProto.V1;
-
+@inject ILogger<FiltrInput> _logger
 <div class="filtr">
     <div class="input-group mb-3">
         @if (LastRequest.HistoryRequest.Count > 0)

@@ -61,10 +61,14 @@
                     </div>
                 }
                 <ButtonModal>
-                    <CheckP BitPosList="@(new[]{NameBitsPos.Create, NameBitsPos.CreateNoStandart})">
+                    <CheckP BitPosList="@(new[]{NameBitsPos.CreateMessage, NameBitsPos.CreateNoStandart})">
                         @if (Edit == true)
                         {
                             <BSumbit Text="@($"{(_uploaded>0? $"{_uploaded}KB / {_fileLength / 1024}KB":GsoRep["IDS_STRING_SAVE"])}")" IsProcessing="context" />
+                        }
+                        else
+                        {
+                            <BDark IsDisabled="@(true)" Text="@GsoRep["IDS_STRING_SAVE"]" />
                         }
                     </CheckP>
                     <BCancel OnClick="Cancel" />

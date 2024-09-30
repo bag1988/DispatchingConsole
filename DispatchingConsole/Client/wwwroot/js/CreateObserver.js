@@ -20,31 +20,45 @@
           try {
             // прекращаем наблюдение
             observer.unobserve(entry.target);
-            let top = document.querySelector(".table-scroll-v")?.scrollTop;
-            let startHeight = entry.target.parentElement?.offsetHeight;
+            let top = entry.target.parentElement?.scrollTop;
+            let startHeight = entry.target.parentElement?.scrollHeight;
             await this.dotNet.invokeMethodAsync(this.callBack, this.args);
-            let endHeight = entry.target.parentElement?.offsetHeight;            
-            document.querySelector(".table-scroll-v")?.scrollTo(0, (top + (endHeight - startHeight)));
+            let endHeight = entry.target.parentElement?.scrollHeight;
+            entry.target.parentElement?.scrollTo(0, (top + (endHeight - startHeight)));
           }
           catch (e) {
-            console.log(e);
+            console.error("callBack", e.message);
           }
         }
       })
     }, this.options);
   }
-  static startObserver(obj, argsValue) {
-    this.stopObserver();
-    this.currentObj = obj;
-    this.args = argsValue;
-    this.observer.observe(obj);
-  }
-
-  static stopObserver() {
-    if (this.currentObj) {
-      this.observer.unobserve(this.currentObj);
+  static startObserver(querySelector, argsValue) {
+    try {
+      this.stopObserver();
+      if (querySelector) {
+        let node = document.querySelector(querySelector);
+        if (node) {
+          this.currentObj = node;
+          this.args = argsValue;
+          this.observer.observe(node);
+        }
+      }
     }
-    this.currentObj = null;
-    this.args = null;
+    catch (e) {
+      console.error("startObserver", e.message);
+    }
+  }
+  static stopObserver() {
+    try {
+      if (this.currentObj) {
+        this.observer.unobserve(this.currentObj);
+      }
+      this.currentObj = null;
+      this.args = null;
+    }
+    catch (e) {
+      console.error("stopObserver", e.message);
+    }
   }
 }

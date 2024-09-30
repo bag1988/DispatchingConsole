@@ -20,6 +20,9 @@ namespace BlazorLibrary.Shared.Situation.NextPage
         [Parameter]
         public bool? IsReadOnly { get; set; } = false;
 
+        [Parameter]
+        public EventCallback CloseAllAction { get; set; }
+
         //private List<GrpcSMControlSys.SituationItem>? OldStaffList = null;
 
         private SMControlSysProto.V1.SituationItem? SelectItem = null;
@@ -48,7 +51,7 @@ namespace BlazorLibrary.Shared.Situation.NextPage
             StaffId = await _User.GetLocalStaff();
 
             await GetList();
-            _ = _HubContext.SubscribeAsync(this);
+            _ = _HubContext.SubscribeAndStartAsync(this, typeof(IPubSubMethod));
         }
 
         [Description(DaprMessage.PubSubName)]
@@ -147,6 +150,14 @@ namespace BlazorLibrary.Shared.Situation.NextPage
             }
 
             await SaveSit(StaffList);
+        }
+
+        private async Task Close()
+        {
+            if (CloseAllAction.HasDelegate)
+            {
+                await CloseAllAction.InvokeAsync();
+            }
         }
 
         private async Task Cancel()

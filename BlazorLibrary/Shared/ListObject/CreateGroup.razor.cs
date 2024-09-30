@@ -63,7 +63,9 @@ namespace BlazorLibrary.Shared.ListObject
         private async Task OnOK()
         {
             if (Model == null)
+            {
                 return;
+            }
 
             bool isReturn = false;
 
@@ -72,34 +74,26 @@ namespace BlazorLibrary.Shared.ListObject
                 MessageView?.AddError("", AsoRep["NotChangeSave"]);
                 isReturn = true;
             }
-            else if (string.IsNullOrEmpty(Model.GroupName))
+            if (string.IsNullOrEmpty(Model.GroupName))
             {
                 MessageView?.AddError("", UUZSRep["IDS_STRING_ENTER_NAME_GROUP"]);
                 isReturn = true;
             }
-            else if (Model.GroupID == 0)
+            if (Model.GroupID == 0)
             {
                 MessageView?.AddError("", UUZSRep["IDS_STRING_REENTER_GROUP_NUMBER"]);
                 isReturn = true;
             }
-            else if (DeviceObj_ID == null || DeviceObj_ID.ObjID == 0)
-            {
-                var r = await CheckExistGroupID(new OBJ_ID() { ObjID = Model.GroupID, StaffID = Model.StaffID });
 
-                if (r?.Count > 0)
-                {
 
-                    MessageView?.AddError("", Model.GroupID + " " + UUZSRep["IDS_STRING_ALREADY_ENTERED"]);
-                    isReturn = true;
-                }
 
-            }
-            else if (Model.TimeslotLength == 0)
+            if (Model.TimeslotLength == 0)
             {
                 MessageView?.AddError("", UUZSRep["IDS_STRING_REENTER_LEN_TIMESLOT"]);
                 isReturn = true;
             }
-            else if (Model.TimeslotLength < 300)
+
+            if (Model.TimeslotLength < 300)
             {
                 Remained = TimeSpan.FromSeconds(10);
                 IsTimeslot = true;
@@ -117,9 +111,12 @@ namespace BlazorLibrary.Shared.ListObject
                     StateHasChanged();
                 }
                 if (IsNextOk != null)
+                {
                     isReturn = true;
+                }
             }
-            else if (Model.TimeslotLength > 5000)
+
+            if (Model.TimeslotLength > 5000)
             {
                 Remained = TimeSpan.FromSeconds(10);
                 IsTimeslot = true;
@@ -139,11 +136,29 @@ namespace BlazorLibrary.Shared.ListObject
                 if (IsNextOk != null)
                     isReturn = true;
             }
-            else if (!SelectedFolders?.Any() ?? true)
+
+            if (!SelectedFolders?.Any() ?? true)
             {
                 MessageView?.AddError("", UUZSRep["IDS_STRING_NOT_DEVICE_IN_GROUP"]);
                 isReturn = true;
             }
+
+            if (!isReturn)
+            {
+                if (DeviceObj_ID == null || DeviceObj_ID.ObjID == 0)
+                {
+                    var r = await CheckExistGroupID(new OBJ_ID() { ObjID = Model.GroupID, StaffID = Model.StaffID });
+
+                    if (r == null || r.Count > 0)
+                    {
+                        MessageView?.AddError("", Model.GroupID + " " + UUZSRep["IDS_STRING_ALREADY_ENTERED"]);
+                        isReturn = true;
+                    }
+                }
+            }
+
+
+
 
             if (!isReturn)
             {
@@ -226,7 +241,10 @@ namespace BlazorLibrary.Shared.ListObject
                 return;
 
             if (Model != null)
+            {
                 Model.ConnParam = sValue;
+                Model.BaseType = request.BaseType;
+            }
             SelectData = null;
             await GetGroupLineDevList(request);
         }
@@ -426,19 +444,16 @@ namespace BlazorLibrary.Shared.ListObject
 
         private async Task<CountResponse> CheckExistGroupID(OBJ_ID request)
         {
-
             CountResponse response = new();
-            await Http.PostAsJsonAsync("api/v1/CheckExistGroupID", request).ContinueWith(async x =>
+            var result = await Http.PostAsJsonAsync("api/v1/CheckExistGroupID", request);
+            if (result.IsSuccessStatusCode)
             {
-                if (x.Result.IsSuccessStatusCode)
-                {
-                    response = await x.Result.Content.ReadFromJsonAsync<CountResponse>() ?? new();
-                }
-                else
-                {
-                    MessageView?.AddError("", UUZSRep["IDS_STRING_ERR_CHECK_GROUP_NUMBER"]);
-                }
-            });
+                response = await result.Content.ReadFromJsonAsync<CountResponse>() ?? new();
+            }
+            else
+            {
+                MessageView?.AddError("", UUZSRep["IDS_STRING_ERR_CHECK_GROUP_NUMBER"]);
+            }
             return response;
         }
 

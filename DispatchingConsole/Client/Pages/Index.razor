@@ -1,17 +1,18 @@
 ﻿@page "/{MissedKeyChatRoom?}"
 @using SharedLibrary.Models;
-@using DispatchingConsole.Client.Shared.DropFiles;
-@using DispatchingConsole.Client.Shared.PasteFiles;
 @using SharedLibrary.Utilities;
 @using DispatchingConsole.Client.WebRTC;
+@using BlazorLibrary.Models.CustomEvents.DropFiles;
+@using BlazorLibrary.Models.CustomEvents.PasteFiles;
 @inject ILogger<Index> _logger
-@inherits FiltrInherits<ViewPodsMessageFiltr>
-
-
 
 <TitleView>@DispRep["PODS"]</TitleView>
 
-    @if (_webRtc.InCallingConnect != null || SelectConnect != null)
+@if (IsLoadPage)
+{
+    <PLoad />
+}
+else if (_webRtc.InCallingConnect != null || SelectConnect != null)
 {
     <PSticky Color="warning" StyleTop="0">
         <div class="lh-1">
@@ -122,55 +123,55 @@
                     <b class="ms-2">
                         @($"{DispRep["ONLY_MESSAGES"]} {DispRep["ACTIVE_CONNECT"]} - ")
                     </b>
-                    <BPrimary AddClass="m-1 btn-sm" IsOutline="true" OnClick="()=>SelectConnect =_webRtc.ConnectList.FirstOrDefault(x => x.Key != SelectConnect.Key && (x.Items.Any(i => i.State >= StateCall.Calling)))" Text="@(_webRtc.ConnectList.FirstOrDefault(x => x.Key != SelectConnect.Key && (x.Items.Any(i => i.State >= StateCall.Calling)))?.NameRoom?? "Error get name")" />
+                    <BPrimary AddClass="m-1 btn-sm" IsOutline="true" OnClick="SetSelectValue" Text="@(_webRtc.ConnectList.FirstOrDefault(x => x.Key != SelectConnect.Key && (x.Items.Any(i => i.State >= StateCall.Calling)))?.NameRoom?? "Error get name")" />
                 }
             }
         }
     </PSticky>
 }
+else if (SelectConnect == null)
+{
+    <p class="alert alert-warning m-1">
+        <b>@DispRep["W_SELECT_ROOM"]</b>
+    </p>
+}
 
 <div class="row">
-    <div class="col" @ondragover="OnDragOver" @ondragover:preventDefault="true" @ondragover:stopPropagation="true" @ondropfiles="OnSetFiles">
+    <div class="col row-content" @ondragover="OnDragOver" @ondragover:preventDefault="true" @ondragover:stopPropagation="true" @ondropfiles="OnSetFiles">
+        <MessagesForChat Messages="_webRtc.CurrentChatMessages" />
         @if (SelectConnect != null)
         {
-            @if (!IsPageLoad)
-            {
-                <FiltrInput AddItemFiltr="AddItemFiltr" RemoveItemsFiltr="RemoveItemsFiltr" Items="FiltrItems" Hints="HintItems" PlaceHolder="@PlaceHolder" />
-            }
-            <DivScroll>
-                <MessagesForChat Messages="_webRtc.CurrentChatMessages" />
-                <BlazorLibrary.Shared.Modal.ButtonModal>
-                    <div class="w-100">
-                        <BlazorLibrary.Shared.FormComponent.FormDefault OnSumbit="SendMessageForClient">
-                            <textarea @onkeydown="OnKeyUp" @onkeydown:preventDefault="_shouldPreventDefault" @ref="_textArea" cols="20" class="form-control" @onpastefiles="OnSetFiles" @bind="_webRtc.TempMessage" @bind:event="oninput" placeholder="@DispRep["TEXT_MESSAGE"]"></textarea>
-                            <BSumbit Text="@DispRep["SEND"]" IsProcessing="context" />
-                            @if (DropFileToChat == null)
+            <div class="message-control py-2">
+                <div class="alert alert-secondary py-2 my-0 ">
+                    <BlazorLibrary.Shared.FormComponent.FormDefault OnSumbit="SendMessageForClient">
+                        <textarea @onkeydown="OnKeyUp" @onkeydown:preventDefault="_shouldPreventDefault" @ref="_textArea" cols="20" class="form-control" @onpastefiles="OnSetFiles" @bind="_webRtc.TempMessage" @bind:event="oninput" placeholder="@DispRep["TEXT_MESSAGE"]"></textarea>
+                        <BSumbit Text="@DispRep["SEND"]" IsProcessing="context" />
+                        @if (DropFileToChat == null)
+                        {
+                            @if (!IsRecording)
                             {
-                                @if (!IsRecording)
-                                {
-                                    <BPrimary Text="@($"{(UploadForDialog>0?$" {UploadForDialog}KB / {FileSize / 1024}KB":DispRep["UPLOADING"])}")" OnClick="ShowOpenFilePicker">
-                                        <span title="@DispRep["SEND_FILE"]" class="oi oi-data-transfer-upload me-0"></span>
-                                    </BPrimary>
-                                }
-                                @if (_webRtc.GetStateSelectCalling <= StateCall.Disconnect && UploadForDialog == 0)
-                                {
-                                    <button title="@(IsRecording?GsoRep["STOP_RECORD"]:GsoRep["IDS_MICROPHONE"])" class="btn @(IsRecording?"btn-warning align-items-center":"btn-danger") m-1" type="button" @onclick="()=>(IsRecording?SendStopRecordAudio():StartStreamRecordAudio())">
-                                        <span class="oi @(IsRecording?"oi-media-stop":"oi-microphone") mx-1"></span>
-                                        @if (IsRecording == true)
-                                        {
-                                            <span class="ms-1">@TimeLeft</span>
-                                        }
-                                    </button>
-                                }
+                                <BPrimary Text="@($"{(UploadForDialog>0?$" {UploadForDialog}KB / {FileSize / 1024}KB":DispRep["UPLOADING"])}")" OnClick="ShowOpenFilePicker">
+                                    <span title="@DispRep["SEND_FILE"]" class="oi oi-data-transfer-upload me-0"></span>
+                                </BPrimary>
                             }
-                            else
+                            @if (_webRtc.GetStateSelectCalling <= StateCall.Disconnect && UploadForDialog == 0)
                             {
-                                <span class="m-1">@($"{(UploadForDrop > 0 ? $" {UploadForDrop}KB / {FileSizeForDrop / 1024}KB" : DispRep["UPLOADING"])}")</span>
+                                <button title="@(IsRecording?GsoRep["STOP_RECORD"]:GsoRep["IDS_MICROPHONE"])" class="btn @(IsRecording?"btn-warning align-items-center":"btn-danger") m-1" type="button" @onclick="()=>(IsRecording?SendStopRecordAudio():StartStreamRecordAudio())">
+                                    <span class="oi @(IsRecording?"oi-media-stop":"oi-microphone") mx-1"></span>
+                                    @if (IsRecording == true)
+                                    {
+                                        <span class="ms-1">@TimeLeft</span>
+                                    }
+                                </button>
                             }
-                        </BlazorLibrary.Shared.FormComponent.FormDefault>
-                    </div>
-                </BlazorLibrary.Shared.Modal.ButtonModal>
-            </DivScroll>
+                        }
+                        else
+                        {
+                            <span class="m-1">@($"{(UploadForDrop > 0 ? $" {UploadForDrop}KB / {FileSizeForDrop / 1024}KB" : DispRep["UPLOADING"])}")</span>
+                        }
+                    </BlazorLibrary.Shared.FormComponent.FormDefault>
+                </div>
+            </div>
         }
     </div>
     <div id="remoteVideoArray" class="col col-md-5 d-none"></div>
@@ -232,9 +233,6 @@
                                             <BSecondary IsOutline="true" OnClick="AddSelect">
                                                 <span class="oi oi-caret-right me-0 ms-2"></span>
                                             </BSecondary>
-                                            @* <BSecondary IsOutline="true" OnClick="AddAll">
-                            <span class="oi oi-media-skip-forward me-0 ms-2"></span>
-                            </BSecondary>*@
                                         </div>
                                     }
                                 </ButtonModal>

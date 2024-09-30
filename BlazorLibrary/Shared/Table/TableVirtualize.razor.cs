@@ -2,7 +2,6 @@
 using Microsoft.AspNetCore.Components;
 using Microsoft.AspNetCore.Components.Web.Virtualization;
 using Microsoft.Extensions.Logging;
-using Microsoft.JSInterop;
 using SMDataServiceProto.V1;
 
 namespace BlazorLibrary.Shared.Table
@@ -11,12 +10,15 @@ namespace BlazorLibrary.Shared.Table
     {
         [Parameter]
         public ItemsProvider<TItem>? Provider { get; init; }
+               
+        [Parameter]
+        public bool IsSetMaxHeight { get; set; } = true;
 
         [Parameter]
-        public bool IsSetFirstSelect { get; set; } = false;
+        public int Bottom { get; set; } = 0;
 
         int Colspan => Provider?.ThList?.Count ?? 0;
-        
+
         GetItemRequest request = new();
 
         bool IsLoadData = false;
@@ -27,13 +29,12 @@ namespace BlazorLibrary.Shared.Table
 
         Virtualize<TItem>? virtualize;
 
-        protected override async Task OnInitializedAsync()
+        protected override void OnInitialized()
         {
             try
             {
                 request = Provider?.DefaultRequestItems ?? new() { ObjID = new OBJ_ID() { SubsystemID = 0, ObjID = 0, StaffID = 0 }, LSortOrder = 1, BFlagDirection = 1, SkipItems = 0 };
                 request.CountData = 200;
-                await LoadSelectItem();
             }
             catch (Exception ex)
             {
@@ -201,29 +202,6 @@ namespace BlazorLibrary.Shared.Table
             if (isResetSelectList == true)
                 await SetSelectList.InvokeAsync();
             await RefreshVirtualize();
-            await LoadSelectItem();
-        }
-
-
-        async Task LoadSelectItem()
-        {
-            if (IsSetFirstSelect && SetSelectList.HasDelegate)
-            {
-                var t = Task.Delay(1000);
-                //если идет загрузка, ждем секунду
-                while (Items == null && !t.IsCompletedSuccessfully)
-                {
-                    await Task.Delay(100);
-                }
-
-                var newSelect = GetNextOrFirstItem;
-                if (newSelect != null)
-                {
-                    await SetSelectList.InvokeAsync(new List<TItem>() { newSelect });
-                }
-                else
-                    await SetSelectList.InvokeAsync();
-            }
         }
 
         async Task SetSort(int? id)

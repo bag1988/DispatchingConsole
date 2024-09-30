@@ -26,32 +26,26 @@
             </TreeListUnlimit>
             <ButtonModal AddClass="text-end">
                 @AddBackButons
-                @if (!IsReadOnly)
-                {
-                    <div>
-                        <label class="form-check-label me-1"><input type="checkbox" class="form-check-input" @bind="@AutoAdd" /> @GsoRep["AUTO_ADD_SELECT"]</label>
-                    </div>
-                    <div class="ms-auto">
-                        @if (LoadChildForFolder != null && !IsLoadAll)
-                        {
-                            <BSecondary IsOutline="true">
-                                <span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span>
-                            </BSecondary>
-                        }
-                        else
-                        {
-                            @if (!IsLoadAll)
-                            {
-                                <BSecondary HotKey="@KeyCode.AddSelect" IsOutline="true" OnClick="AddSelected">
-                                    <span class="oi oi-caret-right me-0 ms-2"></span>
-                                </BSecondary>
-                            }
-                            <BSecondary Text="@GsoRep["BLoad"]" HotKey="@KeyCode.AddSelectAll" IsOutline="true" OnClick="AddAll">
-                                <span class="oi oi-media-skip-forward me-0 ms-2"></span>
-                            </BSecondary>
-                        }
-                    </div>
-                }
+                <div>
+                    <label class="form-check-label me-1"><input type="checkbox" disabled="@(IsReadOnly?"disabled":null)" class="form-check-input" @bind="@AutoAdd" /> @GsoRep["AUTO_ADD_SELECT"]</label>
+                </div>
+                <div class="ms-auto">
+                    @if (LoadChildForFolder != null && !IsLoadAll)
+                    {
+                        <BSecondary IsOutline="true">
+                            <span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span>
+                        </BSecondary>
+                    }
+                    else
+                    {
+                        <BSecondary HotKey="@KeyCode.AddSelect" IsOutline="true" OnClick="AddSelected" IsDisabled="@(IsReadOnly || IsLoadAll || !(SelectList?.Count > 0))">
+                            <span class="oi oi-caret-right me-0 ms-2"></span>
+                        </BSecondary>
+                        <BSecondary Text="@GsoRep["BLoad"]" HotKey="@KeyCode.AddSelectAll" IsOutline="true" OnClick="AddAll" IsDisabled="@(IsReadOnly || !(GetFolders?.Any() ?? false))">
+                            <span class="oi oi-media-skip-forward me-0 ms-2"></span>
+                        </BSecondary>
+                    }
+                </div>
             </ButtonModal>
         </DivScroll>
     </div>
@@ -77,58 +71,45 @@
                 </ContentView>
             </TreeListUnlimit>
 
-            @if (SelectItems != null)
-            {
-                <CheckP BitPosList="@(new[]{NameBitsPos.Create, NameBitsPos.CreateNoStandart})">
-                    <ButtonModal>
-                        @if (!IsReadOnly)
-                        {
-                            @*Удалить все объекты из списка*@
-                            <BSecondary IsOutline="true" HotKey="@KeyCode.AddSelectAll" OnClick="RermoveSelectedAll">
-                                <span class="oi oi-media-skip-backward"></span>
-                            </BSecondary>
-
-                            @*Удаление выбранный объект из списка*@
-                            <BSecondary Text="@GsoRep["BLoad"]" IsOutline="true" HotKey="@KeyCode.AddSelect" OnClick="()=>RemoveSelected(true)">
-                                <span class="oi oi-caret-left"></span>
-                            </BSecondary>
-                        }
-                        @AddNextButons?.Invoke(SelectItems)
-                    </ButtonModal>
-                </CheckP>
-            }
-
+            <ButtonModal>
+                @*Удалить все объекты из списка*@
+                <BSecondary IsOutline="true" HotKey="@KeyCode.AddSelectAll" OnClick="RermoveSelectedAll" IsDisabled="@(IsReadOnly || !(SelectItems?.Count > 0))">
+                    <span class="oi oi-media-skip-backward"></span>
+                </BSecondary>
+                @*Удаление выбранный объект из списка*@
+                <BSecondary Text="@GsoRep["BLoad"]" IsOutline="true" HotKey="@KeyCode.AddSelect" OnClick="()=>RemoveSelected(true)" IsDisabled="@(IsReadOnly || !(SelectListSelected?.Any() ?? false))">
+                    <span class="oi oi-caret-left"></span>
+                </BSecondary>
+                @AddNextButons?.Invoke(SelectItems)
+            </ButtonModal>
         </DivScroll>
     </div>
 </div>
-<CheckP BitPosList="@(new[]{NameBitsPos.Create, NameBitsPos.CreateNoStandart})">
-    @if (Abon != null)
-    {
-        <CreateAbonent CallbackEvent="()=>{Abon=null;}" Abon="Abon" />
-    }
-
-    @if (IsDeleteAbon == true)
-    {
-        <ModalDialog Title="@GsoRep["IDS_STRING_EDITING"]" ButtonCloseEvent="CanselDelete">
-            <BodyContent>
-                @if (ListObj != null && ListObj.Any())
-                {
-                    <Cards AddClass="alert-warning" Header="@WarningDelete">
-                        <ul>
-                            <Virtualize Items="ListObj" Context="item">
-                                <li>@item</li>
-                            </Virtualize>
-                        </ul>
-                        <p>
-                            @DeviceRep["IDS_STRING_WARNING_DELETE"]
-                        </p>
-                    </Cards>
-                }
-            </BodyContent>
-            <ButtonContent>
-                <BEdit OnClick="()=>RemoveSelected(true)" />
-                <BCancel OnClick="CanselDelete" />
-            </ButtonContent>
-        </ModalDialog>
-    }
-</CheckP>
+@if (Abon != null)
+{
+    <CreateAbonent CallbackEvent="()=>{Abon=null;}" Abon="Abon" />
+}
+@if (IsDeleteAbon)
+{
+    <ModalDialog Title="@GsoRep["IDS_STRING_EDITING"]" ButtonCloseEvent="CanselDelete">
+        <BodyContent>
+            @if (ListObj != null && ListObj.Any())
+            {
+                <Cards AddClass="alert-warning" Header="@WarningDelete">
+                    <ul>
+                        <Virtualize Items="ListObj" Context="item">
+                            <li>@item</li>
+                        </Virtualize>
+                    </ul>
+                    <p>
+                        @DeviceRep["IDS_STRING_WARNING_DELETE"]
+                    </p>
+                </Cards>
+            }
+        </BodyContent>
+        <ButtonContent>
+            <BEdit OnClick="()=>RemoveSelected(true)" />
+            <BCancel OnClick="CanselDelete" />
+        </ButtonContent>
+    </ModalDialog>
+}

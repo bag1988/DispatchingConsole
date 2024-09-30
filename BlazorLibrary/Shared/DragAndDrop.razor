@@ -1,0 +1,48 @@
+﻿@inject ILogger<DragAndDrop> _logger
+
+<div class="d-flex align-items-center flex-column justify-content-center alert alert-secondary w-100 drag-container">
+    <svg xmlns="http://www.w3.org/2000/svg" width="150" fill="currentColor" class="text-muted" viewBox="0 0 16 16">
+        <path d="M.5 9.9a.5.5 0 0 1 .5.5v2.5a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1v-2.5a.5.5 0 0 1 1 0v2.5a2 2 0 0 1-2 2H2a2 2 0 0 1-2-2v-2.5a.5.5 0 0 1 .5-.5" />
+        <path d="M7.646 11.854a.5.5 0 0 0 .708 0l3-3a.5.5 0 0 0-.708-.708L8.5 10.293V1.5a.5.5 0 0 0-1 0v8.793L5.354 8.146a.5.5 0 1 0-.708.708z" />
+    </svg>
+    <label for="file-upload-backup" class="text-primary pointer">
+        @if (IsMultiple)
+        {
+            @GsoRep[nameof(GsoLocalizationKey.SELECT_FILES)]
+        }
+        else
+        {
+            @DeviceRep["SELECT_FILE"]
+        }
+    </label>
+    <label>
+        @if (IsMultiple)
+        {
+            @GsoRep[nameof(GsoLocalizationKey.OR_DRAG_AND_DROP_FILES)]
+        }
+        else
+        {
+            @GsoRep[nameof(GsoLocalizationKey.OR_DRAG_AND_DROP)]
+        }
+
+    </label>
+
+    @if (filesForUpload?.Count > 0)
+    {
+        var index = 1;
+        @foreach (var file in filesForUpload)
+        {
+            <span class="@(GetStatusCodeColor(file.StatusCode))">@($"{index}. {file.Name}")</span>
+            @if (file.Loaded > 0 && file.StatusCode == null)
+            {
+                <div class="d-flex align-items-center p-2 w-75">
+                    <span class="mx-1" title="@DeviceRep[nameof(DeviceConsoleLocalizationKey.TIME_HAS_PASSED)]">@file.GetUploadTime.ToString(@"hh\:mm\:ss")</span>
+                    <div class="progress-info flex-fill text-dark" data-text="@($"{file.GetTotalProgressProcent}% ({file.GetSpeedUpload.ToString("0.##")} {DeviceRep[nameof(DeviceConsoleLocalizationKey.MB_S)]})")" style="--progress:@(file.GetTotalProgressProcent)%;"></div>
+                    <span class="mx-1" title="@DeviceRep[nameof(DeviceConsoleLocalizationKey.REMAINING_TIME)]">@file.GetRemainingTime.ToString(@"hh\:mm\:ss")</span>
+                </div>
+            }
+            index++;
+        }
+    }
+    <input id="file-upload-backup" type="file" multiple="@(IsMultiple?"true":null)" accept=".bak" class="d-none upload-large-file" />
+</div>

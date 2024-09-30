@@ -1,16 +1,8 @@
-﻿using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Net.Http.Json;
-using System.Text;
-using System.Threading.Tasks;
-using BlazorLibrary.Models;
-using BlazorLibrary.Shared.Buttons;
-using BlazorLibrary.Shared.Table;
+﻿using System.Net.Http.Json;
 using Google.Protobuf;
-using Google.Protobuf.WellKnownTypes;
 using Label.V1;
 using Microsoft.AspNetCore.Components;
+using SharedLibrary.Extensions;
 using SMDataServiceProto.V1;
 using Field = Label.V1.Field;
 
@@ -23,68 +15,19 @@ namespace BlazorLibrary.Shared.LabelsComponent
 
         public GetFieldList? keyList { get; set; }
 
-        TableItem? SelectItem { get; set; }
+        Field? SelectItem { get; set; }
 
         bool IsViewSpecification = false;
 
         bool IsPageLoad = true;
 
-        public Dictionary<int, string> ThList = new();
-
-        TableVirtualize<TableItem>? table;
-
-        enum TypeField
-        {
-            Select = 1,
-            Input
-        }
-
-        class TableItem
-        {
-            public int Id { get; set; }
-            public TypeField Type { get; set; }
-            public int IdField { get; set; }
-            public string? NameField { get; set; }
-            public int IdValue { get; set; }
-            public string? NameValue { get; set; }
-        }
-
         protected override async Task OnInitializedAsync()
         {
-            ThList = new Dictionary<int, string>
-            {
-                { -1, DeviceRep["SPECIFICATION"]},
-                { -2, AsoRep["Value"] }
-            };
-
             await GetKeyList();
-
             IsPageLoad = false;
         }
 
-        ItemsProvider<TableItem> GetProvider => new ItemsProvider<TableItem>(ThList, LoadChildList, new GetItemRequest() { ObjID = IdForm?.ObjID ?? new() }, new List<int>() { 50, 50 });
-
-        private ValueTask<IEnumerable<TableItem>> LoadChildList(GetItemRequest req)
-        {
-            var newData = new List<TableItem>();
-
-            if (keyList != null)
-            {
-                if (keyList.FieldList?.List?.Count(x => !string.IsNullOrEmpty(x.ValueField) || x.NameField == SelectItem?.NameField) > 0)
-                {
-                    newData.AddRange(keyList.FieldList.List.Where(x => !string.IsNullOrEmpty(x.ValueField) || x.NameField == SelectItem?.NameField).Select(x => new TableItem()
-                    {
-                        Id = newData.Count + 1,
-                        IdField = x.IdNameField,
-                        IdValue = x.IdValueField,
-                        NameField = x.NameField,
-                        NameValue = x.ValueField,
-                        Type = TypeField.Input
-                    }));
-                }
-            }
-            return new(newData);
-        }
+        IEnumerable<Field> GetProvider => keyList?.FieldList?.List.ToList() ?? new List<Field>();
 
         private async Task GetKeyList()
         {
@@ -98,10 +41,8 @@ namespace BlazorLibrary.Shared.LabelsComponent
                     keyList = JsonParser.Default.Parse<GetFieldList>(json);
                 }
             }
-            if (keyList == null)
-            {
-                keyList = new() { FieldList = new(), FieldHelpList = new() };
-            }
+
+            keyList ??= new() { FieldList = new(), FieldHelpList = new() };
 
             if (keyList.FieldList?.List?.Count(x => !string.IsNullOrEmpty(x.ValueField)) > 0)
                 IsViewSpecification = true;
@@ -110,46 +51,26 @@ namespace BlazorLibrary.Shared.LabelsComponent
 
         void SetNameField(ChangeEventArgs e)
         {
-            if (keyList == null)
-                keyList = new() { FieldList = new(), FieldHelpList = new() };
+            keyList ??= new() { FieldList = new(), FieldHelpList = new() };
 
-            if ((!keyList.FieldList.List?.Any(x => x.NameField == e.Value?.ToString()) ?? true))
+            if ((!keyList.FieldList.List?.Any(x => x.NameField == e.Value?.ToString()) ?? true) && SelectItem != null)
             {
-                Field newItem = new()
-                {
-                    NameField = e.Value?.ToString()
-                };
-
-                keyList.FieldList.List?.Add(newItem);
-            }
-
-            if (SelectItem != null)
-            {
-                SelectItem.NameField = e.Value?.ToString();                
+                SelectItem.NameField = e.Value?.ToString();
             }
         }
 
-
-        async Task SetValueField(ChangeEventArgs e)
+        void SetValueField(ChangeEventArgs e)
         {
             if (SelectItem == null || keyList == null)
                 return;
 
             string nameField = SelectItem.NameField ?? "";
 
-            if (SelectItem.Type == TypeField.Input)
-            {
-                var item = keyList.FieldList?.List?.FirstOrDefault(x => x.NameField == nameField);
+            var item = keyList.FieldList?.List?.FirstOrDefault(x => x.NameField == nameField);
 
-                if (item != null)
-                {
-                    item.ValueField = e.Value?.ToString();
-                }
-            }
-            if (table != null)
+            if (item != null)
             {
-                await table.ResetData();
-                SelectItem = table.FindItemMatch(x => x.NameField == nameField);
+                item.ValueField = e.Value?.ToString();
             }
         }
 
@@ -159,7 +80,7 @@ namespace BlazorLibrary.Shared.LabelsComponent
             {
                 List<string> valueList = new();
 
-                if (!string.IsNullOrEmpty(SelectItem?.NameField) && SelectItem.Type == TypeField.Input)
+                if (!string.IsNullOrEmpty(SelectItem?.NameField))
                 {
                     if (keyList?.FieldHelpList?.List?.Count > 0)
                     {
@@ -179,32 +100,36 @@ namespace BlazorLibrary.Shared.LabelsComponent
 
                 if (keyList?.FieldHelpList?.List?.Count > 0)
                 {
-                    freeKeyList.AddRange(keyList.FieldHelpList.List.Where(x => !table?.AnyItemMatch(k => k.NameField == x.NameField) ?? true).Select(x => x.NameField));
+                    freeKeyList.AddRange(keyList.FieldHelpList.List.Where(x => !GetProvider.Any(k => k.NameField == x.NameField)).Select(x => x.NameField));
                 }
                 return freeKeyList;
             }
         }
 
 
-        async Task AddSpicification()
+        void AddSpicification()
         {
-            if (table != null)
+            keyList ??= new() { FieldList = new() };
+
+            var newItem = keyList.FieldList.List.FirstOrDefault(x => string.IsNullOrEmpty(x.NameField) || string.IsNullOrEmpty(x.ValueField));
+            if (newItem == null)
             {
-                await table.ResetData();
-                var newItem = new TableItem() { Id = table.CountItemMatch(x => x.Id > 0) + 1, Type = TypeField.Input };
-                await table.AddItem(newItem);
-                SelectItem = newItem;
+                newItem = new Field()
+                {
+
+                };
+                keyList.FieldList.List.Add(newItem);
             }
+            SelectItem = newItem;
         }
 
 
-        void SetSelectItem(List<TableItem>? items)
+        void SetSelectItem(List<Field>? items)
         {
             if (SelectItem?.Equals(items?.LastOrDefault()) ?? false)
                 return;
-
             SelectItem = items?.LastOrDefault();
+            keyList?.FieldList?.List?.RemoveAll(x => string.IsNullOrEmpty(x.NameField) && string.IsNullOrEmpty(x.ValueField));
         }
-
     }
 }

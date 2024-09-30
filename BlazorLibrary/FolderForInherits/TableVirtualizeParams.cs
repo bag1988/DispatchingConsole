@@ -1,9 +1,4 @@
-﻿using System;
-using System.Collections.Generic;
-using System.Diagnostics.CodeAnalysis;
-using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
+﻿using System.Diagnostics.CodeAnalysis;
 using Microsoft.AspNetCore.Components;
 
 namespace BlazorLibrary.FolderForInherits
@@ -24,8 +19,5 @@ namespace BlazorLibrary.FolderForInherits
 
         [Parameter]
         public bool? IsSticky { get; set; } = true;
-
-        [Parameter]
-        public bool IsMaxHeigth { get; set; } = true;
     }
 }

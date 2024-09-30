@@ -76,7 +76,7 @@
                 <PLoad />
             }
             <ButtonModal>
-                <CheckP BitPosList="@(new[]{NameBitsPos.Create, NameBitsPos.CreateNoStandart})">
+                <CheckP BitPosList="@(new[]{NameBitsPos.CreateAbon, NameBitsPos.CreateNoStandart})" SystemID="@SubsystemType.SUBSYST_ASO">
                     <BSumbit IsProcessing="context" />
                 </CheckP>
                 @if (CallbackEvent.HasDelegate)
